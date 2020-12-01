@@ -5,7 +5,7 @@ export interface AIProvider {
   generate(request: ChatRequest): Promise<string>;
   stream(request: ChatRequest, onChunk: (chunk: StreamChunk) => void): Promise<void>;
   listModels(): Promise<ModelInfo[]>;
-  healthCheck(): Promise<{ reachable: boolean; models: number; error?: string }>;
+  healthCheck(): Promise<{ reachable: boolean; models: number; defaultModel?: string; error?: string }>;
   abort(): void;
 }
 
