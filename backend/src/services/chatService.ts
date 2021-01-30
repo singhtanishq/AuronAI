@@ -195,7 +195,7 @@ export const chatService = {
 
       return { content: fullContent };
     } catch (error) {
-      logger.error('Regenerate error', error);
+      logger.error('Regenerate error', error as Record<string, unknown>);
       await messageRepository.updateStatus(assistantMessageId, 'error');
       throw error;
     }
@@ -226,7 +226,7 @@ export const chatService = {
       }
       return cleanTitle || 'New Chat';
     } catch (error) {
-      logger.warn('Failed to generate title, using fallback', error);
+      logger.warn('Failed to generate title, using fallback', error as Record<string, unknown>);
       // Fallback: use first few words of user message
       const words = userMessage.trim().split(/\s+/).slice(0, 6).join(' ');
       return words.length > 50 ? words.substring(0, 47) + '...' : (words || 'New Chat');
