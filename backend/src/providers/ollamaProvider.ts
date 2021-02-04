@@ -221,7 +221,7 @@ export class OllamaProvider extends BaseAIProvider {
     }
   }
 
-  async healthCheck(): Promise<{ reachable: boolean; models: number; error?: string }> {
+  async healthCheck(): Promise<{ reachable: boolean; models: number; defaultModel?: string; error?: string }> {
     try {
       const response = await this.fetchWithTimeout(
         `${this.baseUrl}/api/tags`,
