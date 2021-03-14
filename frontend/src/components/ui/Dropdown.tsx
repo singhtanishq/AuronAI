@@ -1,7 +1,6 @@
-import React, { useRef, useEffect, useState } from 'react';
+import { useState, useRef, useEffect, cloneElement } from 'react';
 import { createPortal } from 'react-dom';
 import { clsx } from 'clsx';
-import { X } from 'lucide-react';
 
 interface DropdownItem {
   label: string;
@@ -21,7 +20,6 @@ interface DropdownProps {
 
 export function Dropdown({ trigger, items, align = 'right', width }: DropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const triggerElementRef = useRef<HTMLElement>(null);
 
@@ -56,12 +54,8 @@ export function Dropdown({ trigger, items, align = 'right', width }: DropdownPro
   const toggle = () => setIsOpen((prev) => !prev);
   const close = () => setIsOpen(false);
 
-  const triggerWithRef = React.cloneElement(trigger, {
-    ref: (el: HTMLElement | null) => {
-      triggerElementRef.current = el;
-      if (typeof trigger.ref === 'function') trigger.ref(el);
-      else if (trigger.ref && 'current' in trigger.ref) (trigger.ref as React.MutableRefObject<HTMLElement | null>).current = el;
-    },
+  const triggerWithRef = cloneElement(trigger, {
+    ref: triggerElementRef,
     onClick: (e: React.MouseEvent) => {
       e.stopPropagation();
       toggle();

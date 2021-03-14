@@ -1,4 +1,4 @@
-import React, { forwardRef } from 'react';
+import { forwardRef, useEffect, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 
 interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
@@ -26,8 +26,8 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
     ref
   ) => {
     const textareaId = id || label?.toLowerCase().replace(/\s+/g, '-');
-    const textareaRef = React.useRef<HTMLTextAreaElement>(null);
-    const [rows, setRows] = React.useState(minRows);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const [rows, setRows] = useState(minRows);
 
     const handleRef = (el: HTMLTextAreaElement | null) => {
       textareaRef.current = el;
@@ -35,7 +35,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
       else if (ref) ref.current = el;
     };
 
-    React.useEffect(() => {
+    useEffect(() => {
       if (autoResize && textareaRef.current) {
         const textarea = textareaRef.current;
         textarea.style.height = 'auto';
