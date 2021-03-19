@@ -1,7 +1,5 @@
-import React from 'react';
-import { clsx } from 'clsx';
-import { Sparkles, Code, Lightbulb, BookOpen, Mail, Calendar, Bot, Zap } from 'lucide-react';
-import { Button } from '../ui';
+import { Sparkles, Code, Lightbulb, BookOpen, Mail, Calendar, Zap } from 'lucide-react';
+import { Button } from '@/components/ui';
 
 const PROMPT_SUGGESTIONS = [
   {
@@ -46,9 +44,8 @@ export function Welcome({ onSelectPrompt }: { onSelectPrompt: (prompt: string) =
   return (
     <div className="flex flex-col items-center justify-center h-full px-4 text-center">
       <div className="max-w-2xl space-y-8">
-        {/* Logo & Title */}
         <div className="space-y-4 animate-fade-in">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-primary-600 mx-auto">
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-primary-600 mx-auto mb-4">
             <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.514 15.782 3 14.128 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
             </svg>
@@ -63,24 +60,18 @@ export function Welcome({ onSelectPrompt }: { onSelectPrompt: (prompt: string) =
           </div>
         </div>
 
-        {/* Tagline */}
         <div className="animate-slide-up">
           <p className="text-xl text-text-tertiary max-w-md mx-auto">
             Ask me anything. I&apos;m your local AI assistant running entirely on your machine.
           </p>
         </div>
 
-        {/* Capabilities */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 animate-slide-up">
           {PROMPT_SUGGESTIONS.map((suggestion, index) => (
             <button
               key={index}
               onClick={() => onSelectPrompt(suggestion.prompt)}
-              className={clsx(
-                'relative p-4 text-left rounded-xl border border-border-light hover:border-primary-300 dark:hover:border-primary-700',
-                'hover:bg-surface-50 dark:hover:bg-surface-800/50 transition-all duration-200',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500'
-              )}
+              className="relative p-4 text-left rounded-xl border border-border-light hover:border-primary-300 dark:hover:border-primary-700 hover:bg-surface-50 dark:hover:bg-surface-800/50 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
               style={{ animationDelay: `${index * 50}ms` }}
             >
               <div className="flex items-start gap-3">
@@ -99,7 +90,6 @@ export function Welcome({ onSelectPrompt }: { onSelectPrompt: (prompt: string) =
           ))}
         </div>
 
-        {/* Footer */}
         <div className="animate-fade-in pt-4 border-t border-border-light dark:border-border-dark">
           <p className="text-sm text-text-muted">
             Running locally via Ollama &middot; Your data stays on your device
