@@ -1,5 +1,5 @@
 import { Sparkles, Code, Lightbulb, BookOpen, Mail, Calendar, Zap } from 'lucide-react';
-import { Button } from '@/components/ui';
+import { Button } from '../ui';
 
 const PROMPT_SUGGESTIONS = [
   {
