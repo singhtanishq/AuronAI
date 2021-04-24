@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { clsx } from 'clsx';
 import { Loader2, Mail, Lock, User, AlertCircle, CheckCircle } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
-import { Button, Input } from '../ui';
+import { useAuth } from '../contexts/AuthContext';
+import { Button, Input } from '../components/ui';
 
 export function SignupPage() {
   const { signup } = useAuth();
