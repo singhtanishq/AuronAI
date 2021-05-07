@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { clsx } from 'clsx';
 import { Loader2, User, Mail, Lock, AlertCircle, CheckCircle, Camera } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
-import { useToast } from '../ui/Toast';
-import { Button, Input, Modal, Avatar } from '../ui';
-import { api } from '../../services/api';
+import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../components/ui/Toast';
+import { Button, Input, Modal, Avatar } from '../components/ui';
+import { api } from '../services/api';
 
 export function ProfilePage() {
   const { user, updateProfile, changePassword, logout, logoutAll, refreshUser } = useAuth();
