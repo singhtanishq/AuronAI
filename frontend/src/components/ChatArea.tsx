@@ -7,7 +7,7 @@ import { MessageComposer } from './MessageComposer';
 import { useConversationStore, useChatStore, useSettingsStore } from '../stores';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
-import type { Message } from '../types';
+import type { Message, StreamChunk } from '../types';
 
 export function ChatArea() {
   const { isAuthenticated } = useAuth();
@@ -95,11 +95,11 @@ export function ChatArea() {
         {
           conversationId: activeConversationId,
           message: content,
-          model: preferences?.model,
+          model: preferences?.model || undefined,
           temperature: preferences?.temperature,
-          systemPrompt: preferences?.systemPrompt,
+          systemPrompt: preferences?.systemPrompt || undefined,
         },
-        (chunk) => {
+        (chunk: StreamChunk) => {
           if (chunk.type === 'content' && chunk.content) {
             const existingIndex = messages.findIndex((m) => m.id === chunk.messageId);
             if (existingIndex >= 0) {
