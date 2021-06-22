@@ -126,13 +126,6 @@ export function TooltipTrigger({ children, content, delay = 200 }: TooltipTrigge
 
   const child = React.Children.only(children);
 
-  const mergedRef = (node: HTMLElement | null) => {
-    if (typeof child.ref === 'function') child.ref(node);
-    else if (child.ref && 'current' in child.ref) (child.ref as React.MutableRefObject<HTMLElement | null>).current = node;
-    registerTooltip(tooltipId.current, node);
-    return () => unregisterTooltip(tooltipId.current);
-  };
-
   const handleMouseEnter = () => {
     timeoutRef.current = setTimeout(() => showTooltip(tooltipId.current), delay);
   };
@@ -143,7 +136,6 @@ export function TooltipTrigger({ children, content, delay = 200 }: TooltipTrigge
   };
 
   return cloneElement(child, {
-    ref: mergedRef,
     onMouseEnter: handleMouseEnter,
     onMouseLeave: handleMouseLeave,
     'data-tooltip': content,
