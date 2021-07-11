@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { clsx } from 'clsx';
-import { Save, Loader2, Cpu, Palette, Sidebar, Keyboard, Eye, Globe, Database, Zap } from 'lucide-react';
+import { Save, Loader2, Cpu, Palette, Sidebar, Keyboard, Eye, Globe, Database, Zap, User } from 'lucide-react';
 import { useSettingsStore } from '../stores';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useToast } from '../components/ui/Toast';
 import { Button, Input, Modal } from '../components/ui';
 import { api } from '../services/api';
-import type { UserPreferences, User } from '../types';
+import type { UserPreferences } from '../types';
 
 export function SettingsPage() {
   const { preferences, setPreferences, models, ollamaHealthy, isLoading, setLoading } = useSettingsStore();
