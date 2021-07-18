@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect, createContext, useContext, ReactElement } from 'react';
+import React, { useState, useRef, useEffect, createContext, useContext } from 'react';
 import { createPortal } from 'react-dom';
-import { cloneElement, isValidElement } from 'react';
+import { cloneElement } from 'react';
 
 interface TooltipContextType {
   registerTooltip: (id: string, element: HTMLElement | null) => void;
