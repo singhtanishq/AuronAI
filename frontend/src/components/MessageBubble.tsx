@@ -81,12 +81,7 @@ export function MessageBubble({ message, onCopy, onRegenerate, onRetry, showActi
     if (action === 'retry' && onRetry) onRetry();
   };
 
-  // Use marked.parseSync if available (marked v12+), otherwise fall back to marked.parse
-const sanitizedHtml = DOMPurify.sanitize(
-  typeof marked.parseSync === 'function' 
-    ? marked.parseSync(message.content) 
-    : marked.parse(message.content)
-);
+  const sanitizedHtml = DOMPurify.sanitize(marked.parse(message.content));
 
   return (
     <div
