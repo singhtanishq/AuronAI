@@ -81,7 +81,7 @@ export function MessageBubble({ message, onCopy, onRegenerate, onRetry, showActi
     if (action === 'retry' && onRetry) onRetry();
   };
 
-  const sanitizedHtml = DOMPurify.sanitize(marked.parse(message.content));
+  const sanitizedHtml = DOMPurify.sanitize(marked.parse(message.content) as string);
 
   return (
     <div
