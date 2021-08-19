@@ -46,8 +46,8 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
       textareaRef.current = el;
       if (typeof ref === 'function') {
         ref(el);
-      } else if (ref && typeof ref === 'object' && 'current' in ref) {
-        (ref as React.MutableRefObject<HTMLTextAreaElement | null>).current = el;
+      } else if (ref && typeof ref === 'object') {
+        (ref as { current: HTMLTextAreaElement | null }).current = el;
       }
     };
 
