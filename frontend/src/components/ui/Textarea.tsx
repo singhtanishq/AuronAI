@@ -23,7 +23,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
       id,
       ...props
     },
-    ref
+    forwardedRef
   ) => {
     const textareaId = id || label?.toLowerCase().replace(/\s+/g, '-');
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -44,10 +44,10 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
 
     const handleRef = (el: HTMLTextAreaElement | null) => {
       textareaRef.current = el;
-      if (typeof ref === 'function') {
-        ref(el);
-      } else if (ref && typeof ref === 'object') {
-        (ref as { current: HTMLTextAreaElement | null }).current = el;
+      if (typeof forwardedRef === 'function') {
+        forwardedRef(el);
+      } else if (forwardedRef && typeof forwardedRef === 'object') {
+        (forwardedRef as { current: HTMLTextAreaElement | null }).current = el;
       }
     };
 
