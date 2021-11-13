@@ -142,15 +142,13 @@ export const authService = {
   },
 
   async validateToken(token: string): Promise<UserPublic | null> {
-    const payload = decodeToken(token);
-    if (!payload) return null;
-
-    const session = await userRepository.findSession(hashToken(token));
+    const tokenHash = hashToken(token);
+    const session = await userRepository.findSession(tokenHash);
     if (!session || session.expiresAt < new Date()) {
       return null;
     }
 
-    return userRepository.findById(payload.userId);
+    return userRepository.findById(session.userId);
   },
 
   async getUserFromToken(token: string): Promise<UserPublic | null> {
