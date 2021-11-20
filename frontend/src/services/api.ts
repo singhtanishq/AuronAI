@@ -272,9 +272,8 @@ export const api = {
       fetchApi<{ models: ModelInfo[] }>('/ai/models'),
 
     health: () =>
-      fetchApi<{ reachable: boolean; models: number; defaultModel?: string; error?: string }>('/ai/health', {
-      cache: 'no-store',
-  }),
+      fetchApi<{ reachable: boolean; models: number; defaultModel?: string; error?: string }>('/ai/health'),
+  },
 
   // Settings
   settings: {
