@@ -67,7 +67,7 @@ function MainLayout() {
             setModels(modelsRes.value.models);
           }
           if (healthRes.status === 'fulfilled') {
-            setOllamaHealthy(healthRes.value.reachable);
+            setOllamaHealthy(healthRes.value.ai.reachable);
           }
         } catch (error) {
           console.error('Failed to load initial data:', error);
