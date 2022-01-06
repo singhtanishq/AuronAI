@@ -45,27 +45,34 @@ export interface Message {
   updatedAt: string;
 }
 
+export interface ContextMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
 export interface ChatRequest {
-  conversationId?: string;
+  /** The current user message. Never truncated. */
   message: string;
+  /** Prior conversation turns, oldest first, already budgeted by the caller. */
+  history?: ContextMessage[];
   model?: string;
   temperature?: number;
   systemPrompt?: string;
 }
 
-export interface ChatResponse {
-  conversationId: string;
-  messageId: string;
+/**
+ * Terminal outcome of a provider stream. The provider must resolve with one of
+ * these states; an upstream failure must never look like a successful stream.
+ */
+export interface StreamResult {
+  status: 'completed' | 'aborted' | 'error';
   content: string;
-  done: boolean;
+  error?: string;
 }
 
 export interface StreamChunk {
-  type: 'content' | 'done' | 'error';
-  content?: string;
-  messageId?: string;
-  conversationId?: string;
-  error?: string;
+  type: 'content';
+  content: string;
 }
 
 export interface ModelInfo {
@@ -99,18 +106,18 @@ export interface OllamaModel {
   };
 }
 
-export interface HealthStatus {
-  status: 'healthy' | 'degraded' | 'unhealthy';
-  timestamp: string;
-  services: {
-    database: boolean;
-    ollama: boolean;
-  };
-  ollama?: {
-    reachable: boolean;
-    models: number;
-    defaultModel?: string;
-  };
+export interface ProviderHealth {
+  reachable: boolean;
+  models: number;
+  defaultModel?: string;
+  error?: string;
+}
+
+export interface SessionInfo {
+  id: string;
+  createdAt: string;
+  expiresAt: string;
+  isCurrent: boolean;
 }
 
 export interface ApiError {
@@ -145,11 +152,4 @@ export interface UserPreferences {
   model: string;
   temperature: number;
   systemPrompt: string;
-}
-
-export interface JwtPayload {
-  userId: string;
-  email: string;
-  iat?: number;
-  exp?: number;
 }
