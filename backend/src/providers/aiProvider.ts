@@ -1,32 +1,23 @@
-import { ModelInfo, ChatRequest, StreamChunk } from '../types';
+import { ChatRequest, ModelInfo, ProviderHealth, StreamChunk, StreamResult } from '../types';
+
+export class ProviderError extends Error {
+  constructor(
+    message: string,
+    public readonly upstreamStatus?: number
+  ) {
+    super(message);
+    this.name = 'ProviderError';
+  }
+}
 
 export interface AIProvider {
   name: string;
   generate(request: ChatRequest): Promise<string>;
-  stream(request: ChatRequest, onChunk: (chunk: StreamChunk) => void): Promise<void>;
+  stream(
+    request: ChatRequest,
+    onChunk: (chunk: StreamChunk) => void,
+    signal?: AbortSignal
+  ): Promise<StreamResult>;
   listModels(): Promise<ModelInfo[]>;
-  healthCheck(): Promise<{ reachable: boolean; models: number; defaultModel?: string; error?: string }>;
-  abort(): void;
-}
-
-export abstract class BaseAIProvider implements AIProvider {
-  abstract name: string;
-  protected aborted = false;
-
-  abstract generate(request: ChatRequest): Promise<string>;
-  abstract stream(request: ChatRequest, onChunk: (chunk: StreamChunk) => void): Promise<void>;
-  abstract listModels(): Promise<ModelInfo[]>;
-  abstract healthCheck(): Promise<{ reachable: boolean; models: number; defaultModel?: string; error?: string }>;
-
-  abort(): void {
-    this.aborted = true;
-  }
-
-  protected resetAbort(): void {
-    this.aborted = false;
-  }
-
-  protected isAborted(): boolean {
-    return this.aborted;
-  }
+  healthCheck(): Promise<ProviderHealth>;
 }
