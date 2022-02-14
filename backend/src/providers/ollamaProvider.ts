@@ -1,239 +1,308 @@
 import { config } from '../config';
-import { ModelInfo, ChatRequest, StreamChunk, OllamaModel } from '../types';
-import { AIProvider, BaseAIProvider } from './aiProvider';
+import { ChatRequest, ModelInfo, OllamaModel, ProviderHealth, StreamChunk, StreamResult } from '../types';
+import { AIProvider, ProviderError } from './aiProvider';
 import { logger } from '../utils/logger';
 
-export class OllamaProvider extends BaseAIProvider {
+interface OllamaChatChunk {
+  message?: { content: string };
+  done?: boolean;
+  error?: string;
+}
+
+/**
+ * Ollama AI provider.
+ *
+ * Every stream owns its own AbortController, wired to the caller-provided
+ * signal, so concurrent generations never clobber each other's abort state.
+ */
+export class OllamaProvider implements AIProvider {
   name = 'ollama';
-  private baseUrl: string;
-  private defaultModel: string;
-  private timeout: number;
-  private abortController: AbortController | null = null;
+  private readonly baseUrl: string;
+  private readonly defaultModel: string;
+  private readonly overallTimeoutMs: number;
+  private readonly idleTimeoutMs: number;
 
   constructor() {
-    super();
-    this.baseUrl = config.ollama.baseUrl.replace(/\/$/, '');
+    this.baseUrl = config.ollama.baseUrl;
     this.defaultModel = config.ollama.defaultModel;
-    this.timeout = config.ollama.timeout;
+    this.overallTimeoutMs = config.ollama.timeoutMs;
+    this.idleTimeoutMs = config.ollama.idleTimeoutMs;
   }
 
-  private getHeaders(): Record<string, string> {
-    return {
-      'Content-Type': 'application/json',
-    };
-  }
-
-  private async fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number): Promise<Response> {
-    this.abortController = new AbortController();
-    const timeoutId = setTimeout(() => this.abortController?.abort(), timeoutMs);
-
-    try {
-      const response = await fetch(url, {
-        ...options,
-        signal: this.abortController.signal,
-        headers: {
-          ...this.getHeaders(),
-          ...options.headers,
-        },
-      });
-      return response;
-    } finally {
-      clearTimeout(timeoutId);
+  private buildMessages(request: ChatRequest): Array<{ role: string; content: string }> {
+    const messages: Array<{ role: string; content: string }> = [];
+    if (request.systemPrompt) {
+      messages.push({ role: 'system', content: request.systemPrompt });
     }
+    for (const entry of request.history ?? []) {
+      messages.push({ role: entry.role, content: entry.content });
+    }
+    messages.push({ role: 'user', content: request.message });
+    return messages;
+  }
+
+  private async request(pathname: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}${pathname}`, {
+        ...init,
+        signal: init.signal ?? AbortSignal.timeout(timeoutMs),
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (error) {
+      if ((error as Error).name === 'TimeoutError' || (error as Error).name === 'AbortError') {
+        throw new ProviderError('Could not reach Ollama in time. Make sure Ollama is running.');
+      }
+      throw new ProviderError(
+        'Unable to connect to Ollama. Make sure Ollama is installed and running (`ollama serve`).'
+      );
+    }
+
+    if (!response.ok) {
+      let detail = '';
+      try {
+        const body = await response.text();
+        try {
+          const parsed = JSON.parse(body) as { error?: string };
+          detail = parsed.error || body.slice(0, 300);
+        } catch {
+          detail = body.slice(0, 300);
+        }
+      } catch {
+        // ignore body read failures
+      }
+      throw new ProviderError(
+        `Ollama request failed (${response.status})${detail ? `: ${detail}` : ''}`,
+        response.status
+      );
+    }
+
+    return response;
   }
 
   async generate(request: ChatRequest): Promise<string> {
-    this.resetAbort();
-    const model = request.model || this.defaultModel;
-
-    const messages = [
-      ...(request.systemPrompt ? [{ role: 'system' as const, content: request.systemPrompt }] : []),
-      { role: 'user' as const, content: request.message },
-    ];
-
-    const response = await this.fetchWithTimeout(
-      `${this.baseUrl}/api/chat`,
+    const response = await this.request(
+      '/api/chat',
       {
         method: 'POST',
         body: JSON.stringify({
-          model,
-          messages,
+          model: request.model || this.defaultModel,
+          messages: this.buildMessages(request),
           stream: false,
-          options: {
-            temperature: request.temperature ?? 0.7,
-          },
+          options: { temperature: request.temperature ?? 0.7 },
         }),
       },
-      this.timeout
+      this.overallTimeoutMs
     );
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Ollama generate failed: ${response.status} ${error}`);
+    const data = (await response.json()) as { message?: { content: string }; error?: string };
+    if (data.error) {
+      throw new ProviderError(`Ollama error: ${data.error}`);
     }
-
-    const data = await response.json() as { message: { content: string } };
-    return data.message.content;
+    return data.message?.content ?? '';
   }
 
-  async stream(request: ChatRequest, onChunk: (chunk: StreamChunk) => void): Promise<void> {
-    this.resetAbort();
+  async stream(
+    request: ChatRequest,
+    onChunk: (chunk: StreamChunk) => void,
+    signal?: AbortSignal
+  ): Promise<StreamResult> {
     const model = request.model || this.defaultModel;
-    const conversationId = request.conversationId;
-    let messageId: string | undefined;
+    const controller = new AbortController();
 
-    const messages = [
-      ...(request.systemPrompt ? [{ role: 'system' as const, content: request.systemPrompt }] : []),
-      { role: 'user' as const, content: request.message },
-    ];
+    let abortedByCaller = false;
+    let timedOut = false;
 
-    const response = await this.fetchWithTimeout(
-      `${this.baseUrl}/api/chat`,
-      {
+    const onExternalAbort = () => {
+      abortedByCaller = true;
+      controller.abort();
+    };
+    if (signal) {
+      if (signal.aborted) {
+        return { status: 'aborted', content: '' };
+      }
+      signal.addEventListener('abort', onExternalAbort, { once: true });
+    }
+
+    const overallTimer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, this.overallTimeoutMs);
+
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}/api/chat`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model,
-          messages,
+          messages: this.buildMessages(request),
           stream: true,
-          options: {
-            temperature: request.temperature ?? 0.7,
-          },
+          options: { temperature: request.temperature ?? 0.7 },
         }),
-      },
-      this.timeout
-    );
-
-    if (!response.ok) {
-      const error = await response.text();
-      onChunk({ type: 'error', error: `Ollama stream failed: ${response.status} ${error}`, conversationId });
-      return;
+        signal: controller.signal,
+      });
+    } catch (error) {
+      clearTimeout(overallTimer);
+      signal?.removeEventListener('abort', onExternalAbort);
+      if (abortedByCaller) return { status: 'aborted', content: '' };
+      if (timedOut) {
+        return { status: 'error', content: '', error: 'Ollama did not start responding in time.' };
+      }
+      return {
+        status: 'error',
+        content: '',
+        error: 'Unable to connect to Ollama. Make sure Ollama is installed and running (`ollama serve`).',
+      };
     }
 
-    const reader = response.body?.getReader();
-    if (!reader) {
-      onChunk({ type: 'error', error: 'No response body', conversationId });
-      return;
+    if (!response.ok || !response.body) {
+      clearTimeout(overallTimer);
+      signal?.removeEventListener('abort', onExternalAbort);
+      let detail = '';
+      try {
+        const body = await response.text();
+        try {
+          const parsed = JSON.parse(body) as { error?: string };
+          detail = parsed.error || body.slice(0, 300);
+        } catch {
+          detail = body.slice(0, 300);
+        }
+      } catch {
+        // ignore
+      }
+      return {
+        status: 'error',
+        content: '',
+        error: `Ollama request failed (${response.status})${detail ? `: ${detail}` : ''}`,
+      };
     }
 
+    const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
-    let firstChunk = true;
+    let content = '';
+    let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const armIdleTimer = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, this.idleTimeoutMs);
+    };
 
     try {
-      while (!this.isAborted()) {
+      armIdleTimer();
+      while (true) {
         const { done, value } = await reader.read();
         if (done) break;
+        armIdleTimer();
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
 
         for (const line of lines) {
-          if (!line.trim()) continue;
+          const trimmed = line.trim();
+          if (!trimmed) continue;
 
+          let data: OllamaChatChunk;
           try {
-            const data = JSON.parse(line) as {
-              message?: { content: string };
-              done?: boolean;
-              error?: string;
-            };
+            data = JSON.parse(trimmed) as OllamaChatChunk;
+          } catch {
+            logger.warn('Skipping malformed Ollama stream chunk');
+            continue;
+          }
 
-            if (data.error) {
-              onChunk({ type: 'error', error: data.error, conversationId });
-              return;
-            }
+          if (data.error) {
+            return { status: 'error', content, error: `Ollama error: ${data.error}` };
+          }
 
-            if (data.message?.content) {
-              if (firstChunk) {
-                messageId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-                onChunk({
-                  type: 'content',
-                  content: data.message.content,
-                  messageId,
-                  conversationId,
-                });
-                firstChunk = false;
-              } else {
-                onChunk({
-                  type: 'content',
-                  content: data.message.content,
-                  messageId,
-                  conversationId,
-                });
-              }
-            }
+          if (data.message?.content) {
+            content += data.message.content;
+            onChunk({ type: 'content', content: data.message.content });
+          }
 
-            if (data.done) {
-              onChunk({
-                type: 'done',
-                messageId,
-                conversationId,
-              });
-              return;
-            }
-          } catch (parseError) {
-            logger.warn('Failed to parse Ollama stream chunk', { line, error: parseError });
+          if (data.done) {
+            return { status: 'completed', content };
           }
         }
       }
-    } catch (error) {
-      if (this.isAborted()) {
-        onChunk({ type: 'error', error: 'Generation aborted', conversationId, messageId });
-      } else {
-        logger.error('Ollama stream error', error as Record<string, unknown>);
-        onChunk({ type: 'error', error: error instanceof Error ? error.message : 'Stream error', conversationId, messageId });
+
+      // Stream ended without an explicit done flag — treat whatever arrived
+      // as complete; Ollama normally sends done:true on the final line.
+      if (buffer.trim()) {
+        try {
+          const data = JSON.parse(buffer.trim()) as OllamaChatChunk;
+          if (data.message?.content) {
+            content += data.message.content;
+            onChunk({ type: 'content', content: data.message.content });
+          }
+        } catch {
+          // ignore trailing partial data
+        }
       }
+      return { status: 'completed', content };
+    } catch (error) {
+      if (abortedByCaller) {
+        return { status: 'aborted', content };
+      }
+      if (timedOut) {
+        return {
+          status: 'error',
+          content,
+          error:
+            this.overallTimeoutMs === config.ollama.timeoutMs && idleTimer === null
+              ? 'Generation timed out.'
+              : 'Ollama stopped responding. Generation timed out.',
+        };
+      }
+      logger.error('Ollama stream error', error as Record<string, unknown>);
+      return { status: 'error', content, error: 'The response stream failed unexpectedly.' };
     } finally {
+      if (idleTimer) clearTimeout(idleTimer);
+      clearTimeout(overallTimer);
+      signal?.removeEventListener('abort', onExternalAbort);
+      try {
+        await reader.cancel();
+      } catch {
+        // reader may already be closed
+      }
       reader.releaseLock();
     }
   }
 
   async listModels(): Promise<ModelInfo[]> {
     try {
-      const response = await this.fetchWithTimeout(
-        `${this.baseUrl}/api/tags`,
-        { method: 'GET' },
-        10000
-      );
-
-      if (!response.ok) {
-        throw new Error(`Failed to list models: ${response.status}`);
-      }
-
-      const data = await response.json() as { models: OllamaModel[] };
-      return data.models.map((m) => ({
+      const response = await this.request('/api/tags', { method: 'GET' }, 10000);
+      const data = (await response.json()) as { models?: OllamaModel[] };
+      return (data.models ?? []).map((m) => ({
         name: m.name,
         modifiedAt: m.modified_at,
         size: m.size,
         digest: m.digest,
-        details: m.details ? {
-          parentModel: m.details.parent_model,
-          format: m.details.format,
-          family: m.details.family,
-          families: m.details.families,
-          parameterSize: m.details.parameter_size,
-          quantizationLevel: m.details.quantization_level,
-        } : undefined,
+        details: m.details
+          ? {
+              parentModel: m.details.parent_model,
+              format: m.details.format,
+              family: m.details.family,
+              families: m.details.families,
+              parameterSize: m.details.parameter_size,
+              quantizationLevel: m.details.quantization_level,
+            }
+          : undefined,
       }));
     } catch (error) {
-      logger.error('Failed to list Ollama models', error as Record<string, unknown>);
+      logger.warn('Failed to list Ollama models', { error: (error as Error).message });
       return [];
     }
   }
 
-  async healthCheck(): Promise<{ reachable: boolean; models: number; defaultModel?: string; error?: string }> {
+  async healthCheck(): Promise<ProviderHealth> {
     try {
-      const response = await this.fetchWithTimeout(
-        `${this.baseUrl}/api/tags`,
-        { method: 'GET' },
-        5000
-      );
-
-      if (!response.ok) {
-        return { reachable: false, models: 0, error: `HTTP ${response.status}` };
-      }
-
-      const data = await response.json() as { models: OllamaModel[] };
+      const response = await this.request('/api/tags', { method: 'GET' }, 5000);
+      const data = (await response.json()) as { models?: OllamaModel[] };
       return {
         reachable: true,
         models: data.models?.length || 0,
@@ -243,17 +312,9 @@ export class OllamaProvider extends BaseAIProvider {
       return {
         reachable: false,
         models: 0,
+        defaultModel: this.defaultModel,
         error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
-
-  abort(): void {
-    super.abort();
-    this.abortController?.abort();
-  }
-}
-
-export function createOllamaProvider(): OllamaProvider {
-  return new OllamaProvider();
 }
