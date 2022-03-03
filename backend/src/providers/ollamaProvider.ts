@@ -183,6 +183,7 @@ export class OllamaProvider implements AIProvider {
     let buffer = '';
     let content = '';
     let idleTimer: ReturnType<typeof setTimeout> | null = null;
+    void this.idleTimeoutMs;
 
     const armIdleTimer = () => {
       if (idleTimer) clearTimeout(idleTimer);
@@ -249,14 +250,7 @@ export class OllamaProvider implements AIProvider {
         return { status: 'aborted', content };
       }
       if (timedOut) {
-        return {
-          status: 'error',
-          content,
-          error:
-            this.overallTimeoutMs === config.ollama.timeoutMs && idleTimer === null
-              ? 'Generation timed out.'
-              : 'Ollama stopped responding. Generation timed out.',
-        };
+        return { status: 'error', content, error: 'Generation timed out.' };
       }
       logger.error('Ollama stream error', error as Record<string, unknown>);
       return { status: 'error', content, error: 'The response stream failed unexpectedly.' };
