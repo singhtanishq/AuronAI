@@ -2,7 +2,6 @@ import { userRepository } from '../repositories/userRepository';
 import { preferencesRepository } from '../repositories/preferencesRepository';
 import { UserPublic, UserPreferences, SessionInfo } from '../types';
 import { getDatabase, withTransaction } from '../database';
-import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import { logger } from '../utils/logger';
 import { config } from '../config';
@@ -33,7 +32,7 @@ function validateEmail(email: string): boolean {
 }
 
 export const authService = {
-  async signup(name: string, email: string, password: string): Promise<UserPublic> {
+  async signup(name: string, email: string, password: string): Promise<{ user: UserPublic; token: string }> {
     if (!name || !name.trim()) {
       throw new AuthError('Name is required', 'VALIDATION_ERROR');
     }
@@ -59,8 +58,8 @@ export const authService = {
       throw new AuthError('An account with this email already exists', 'EMAIL_TAKEN');
     }
 
-    // User, default preferences, and the first session are created atomically:
-    // a failure must not leave a partial account behind.
+    // User and default preferences are created atomically: a failure must not
+    // leave a partial account behind.
     const user = await withTransaction(async () => {
       const created = await userRepository.create(name.trim(), normalizedEmail, password);
       await preferencesRepository.create(created.id);
@@ -69,10 +68,7 @@ export const authService = {
 
     const token = await this.createSessionForUser(user.id);
     logger.info(`User signed up: ${user.id}`);
-
-    // The token travels to the caller out-of-band from the transaction.
-    void token;
-    return user;
+    return { user, token };
   },
 
   async createSessionForUser(userId: string): Promise<string> {
@@ -255,6 +251,3 @@ export const authService = {
     await userRepository.deleteExpiredSessions();
   },
 };
-
-// Re-exported for the session-list query used above.
-export { uuidv4 };
