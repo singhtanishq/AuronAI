@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
-import { chatService, ChatError } from '../services/chatService';
+import { conversationRepository } from '../repositories/conversationRepository';
+import { chatService, ChatError, ConcurrencyError } from '../services/chatService';
 import { getAIProvider } from '../providers';
 import { authMiddleware, AuthenticatedRequest } from '../middleware/auth';
 import { validateBody } from '../middleware/validation';
@@ -37,47 +38,83 @@ const generationLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-/** SSE event writer that refuses to write after the client disconnected. */
+type SsePayload = Record<string, unknown>;
+
+/**
+ * SSE event writer that refuses to write after the client disconnected, and
+ * sends keep-alive comments so intermediate proxies do not time out.
+ */
 function createSseWriter(res: import('express').Response) {
   let closed = false;
   res.on('close', () => {
     closed = true;
   });
 
+  const pingInterval = setInterval(() => {
+    if (!closed && !res.writableEnded) {
+      res.write(': keep-alive\n\n');
+    }
+  }, 15000);
+
   return {
-    get closed(): boolean {
-      return closed || res.writableEnded;
-    },
-    send(payload: Record<string, unknown>): void {
-      if (this.closed) return;
+    send(payload: SsePayload): void {
+      if (closed || res.writableEnded) return;
       res.write(`data: ${JSON.stringify(payload)}\n\n`);
     },
-    ping(): void {
-      if (this.closed) return;
-      res.write(`: keep-alive\n\n`);
+    finish(): void {
+      clearInterval(pingInterval);
+      if (!closed && !res.writableEnded) {
+        res.end();
+      }
     },
   };
 }
 
-// Model/health listings hit Ollama; a short TTL avoids hammering it when
-// several clients or tabs refresh simultaneously.
-let modelsCache: { at: number; data: unknown } | null = null;
-const MODELS_CACHE_TTL = 15000;
+function startSse(res: import('express').Response): void {
+  res.status(200);
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+}
+
+/** Aborts the in-flight generation when the client disconnects mid-stream. */
+function disconnectSignal(res: import('express').Response): AbortSignal {
+  const controller = new AbortController();
+  res.on('close', () => controller.abort());
+  return controller.signal;
+}
+
+function sseErrorMessage(error: unknown): string {
+  if (error instanceof ChatError || error instanceof AppError) {
+    return error.message;
+  }
+  return 'Chat failed';
+}
 
 router.post('/chat', authMiddleware, generationLimiter, validateBody(chatSchema), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { conversationId, message, model, temperature, systemPrompt } = req.body;
   const userId = req.user!.id;
 
+  // Validate what can produce a clean HTTP error before switching to SSE.
+  if (conversationId) {
+    const conversation = await conversationRepository.findById(conversationId, userId);
+    if (!conversation) {
+      throw new AppError('NOT_FOUND', 'Conversation not found', 404);
+    }
+  }
+  try {
+    chatService.checkCanGenerate(userId);
+  } catch (error) {
+    if (error instanceof ConcurrencyError) {
+      throw new AppError(error.code, error.message, 429);
+    }
+    throw error;
+  }
+
+  startSse(res);
   const sse = createSseWriter(res);
   let assistantMessageId = '';
-  let activeConversationId = conversationId || '';
-
-  const sseHeaders = () => {
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('X-Accel-Buffering', 'no');
-    res.flushHeaders();
-  };
 
   try {
     const result = await chatService.sendMessage({
@@ -87,9 +124,8 @@ router.post('/chat', authMiddleware, generationLimiter, validateBody(chatSchema)
       model,
       temperature,
       systemPrompt,
-      signal: req.res?.req?.aborted ? undefined : disconnectSignal(res),
+      signal: disconnectSignal(res),
       onStart: (info) => {
-        activeConversationId = info.conversationId;
         assistantMessageId = info.assistantMessageId;
         sse.send({
           type: 'start',
@@ -107,9 +143,17 @@ router.post('/chat', authMiddleware, generationLimiter, validateBody(chatSchema)
     });
 
     if (result.status === 'error') {
-      sse.send({ type: 'error', assistantMessageId, message: result.error || 'Generation failed' });
+      sse.send({
+        type: 'error',
+        assistantMessageId: result.assistantMessageId,
+        message: result.error || 'Generation failed',
+      });
     } else if (result.status === 'aborted') {
-      sse.send({ type: 'aborted', conversationId: result.conversationId, assistantMessageId });
+      sse.send({
+        type: 'aborted',
+        conversationId: result.conversationId,
+        assistantMessageId: result.assistantMessageId,
+      });
     } else {
       sse.send({
         type: 'done',
@@ -119,17 +163,10 @@ router.post('/chat', authMiddleware, generationLimiter, validateBody(chatSchema)
       });
     }
   } catch (error) {
-    // Failures before the stream starts (validation, ownership, limits) still
-    // reach the client through the SSE channel because headers may already be
-    // sent for the streaming path.
     logger.error('Chat error', error as Record<string, unknown>);
-    sseHeaders();
-    const message = error instanceof ChatError || error instanceof AppError
-      ? error.message
-      : 'Chat failed';
-    sse.send({ type: 'error', assistantMessageId, message });
+    sse.send({ type: 'error', assistantMessageId, message: sseErrorMessage(error) });
   } finally {
-    if (!sse.closed) res.end();
+    sse.finish();
   }
 }));
 
@@ -137,6 +174,16 @@ router.post('/regenerate', authMiddleware, generationLimiter, validateBody(regen
   const { conversationId, assistantMessageId } = req.body;
   const userId = req.user!.id;
 
+  try {
+    chatService.checkCanGenerate(userId);
+  } catch (error) {
+    if (error instanceof ConcurrencyError) {
+      throw new AppError(error.code, error.message, 429);
+    }
+    throw error;
+  }
+
+  startSse(res);
   const sse = createSseWriter(res);
 
   try {
@@ -158,12 +205,9 @@ router.post('/regenerate', authMiddleware, generationLimiter, validateBody(regen
     }
   } catch (error) {
     logger.error('Regenerate error', error as Record<string, unknown>);
-    const message = error instanceof ChatError || error instanceof AppError
-      ? error.message
-      : 'Regeneration failed';
-    sse.send({ type: 'error', assistantMessageId, message });
+    sse.send({ type: 'error', assistantMessageId, message: sseErrorMessage(error) });
   } finally {
-    if (!sse.closed) res.end();
+    sse.finish();
   }
 }));
 
@@ -177,16 +221,22 @@ router.post('/abort', authMiddleware, validateBody(abortSchema), asyncHandler(as
   res.json({ aborted });
 }));
 
+// Model/health listings hit Ollama; a short TTL avoids hammering it when
+// several clients or tabs refresh simultaneously.
+let modelsCache: { at: number; data: unknown } | null = null;
+const MODELS_CACHE_TTL = 15000;
+
 router.get('/models', authMiddleware, asyncHandler(async (_req, res) => {
   const now = Date.now();
   if (modelsCache && now - modelsCache.at < MODELS_CACHE_TTL) {
-    res.json(modelsCache.data as { models: unknown[] });
+    res.json(modelsCache.data);
     return;
   }
   const provider = getAIProvider();
   const models = await provider.listModels();
-  modelsCache = { at: now, data: { models } };
-  res.json({ models });
+  const payload = { models };
+  modelsCache = { at: now, data: payload };
+  res.json(payload);
 }));
 
 router.get('/health', authMiddleware, asyncHandler(async (_req, res) => {
@@ -196,10 +246,3 @@ router.get('/health', authMiddleware, asyncHandler(async (_req, res) => {
 }));
 
 export default router;
-
-/** Abort the generation if the client disconnects mid-stream. */
-function disconnectSignal(res: import('express').Response): AbortSignal {
-  const controller = new AbortController();
-  res.on('close', () => controller.abort());
-  return controller.signal;
-}
