@@ -193,7 +193,8 @@ router.post('/regenerate', authMiddleware, generationLimiter, validateBody(regen
       assistantMessageId,
       (chunk) => {
         sse.send({ type: 'delta', assistantMessageId, content: chunk.content });
-      }
+      },
+      disconnectSignal(res)
     );
 
     if (result.status === 'error') {
