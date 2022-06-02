@@ -7,7 +7,7 @@ import { logger } from '../utils/logger';
 
 const router = Router();
 
-router.get('/', asyncHandler(async (req, res) => {
+router.get('/', asyncHandler(async (_req, res) => {
   const db = getDatabase();
   let dbHealthy = false;
 
@@ -21,10 +21,10 @@ router.get('/', asyncHandler(async (req, res) => {
   const provider = getAIProvider();
   const aiHealth = await provider.healthCheck();
 
-  const healthy = dbHealthy && aiHealth.reachable;
+  const healthy = dbHealthy;
 
   res.status(healthy ? 200 : 503).json({
-    status: healthy ? 'healthy' : 'degraded',
+    status: healthy ? (aiHealth.reachable ? 'healthy' : 'degraded') : 'unhealthy',
     timestamp: new Date().toISOString(),
     version: '1.0.0',
     environment: config.nodeEnv,
@@ -41,13 +41,13 @@ router.get('/', asyncHandler(async (req, res) => {
   });
 }));
 
-router.get('/ai', asyncHandler(async (req, res) => {
+router.get('/ai', asyncHandler(async (_req, res) => {
   const provider = getAIProvider();
   const health = await provider.healthCheck();
   res.json(health);
 }));
 
-router.get('/models', asyncHandler(async (req, res) => {
+router.get('/models', asyncHandler(async (_req, res) => {
   const provider = getAIProvider();
   const models = await provider.listModels();
   res.json({ models });
