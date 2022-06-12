@@ -1,21 +1,20 @@
 import { createApp } from './app';
 import { config } from './config';
-import { initializeDatabase } from './database';
+import { initializeDatabase, closeDatabase } from './database';
 import { logger } from './utils/logger';
 import { authService } from './services/authService';
-
-const app = createApp();
+import { abortAllGenerations } from './services/chatService';
 
 async function startServer(): Promise<void> {
   try {
-    // Initialize database
     initializeDatabase();
 
-    // Schedule expired session cleanup
-    setInterval(() => {
-      authService.cleanupExpiredSessions().catch(err => logger.error('Session cleanup failed', err));
+    const sessionCleanupTimer = setInterval(() => {
+      authService.cleanupExpiredSessions().catch((err) => logger.error('Session cleanup failed', err as Record<string, unknown>));
     }, 60 * 60 * 1000); // Every hour
+    sessionCleanupTimer.unref();
 
+    const app = createApp();
     const server = app.listen(config.port, () => {
       logger.info(`Auron AI Backend started on port ${config.port}`);
       logger.info(`Environment: ${config.nodeEnv}`);
@@ -24,19 +23,21 @@ async function startServer(): Promise<void> {
       logger.info(`Default Model: ${config.ollama.defaultModel}`);
     });
 
-    // Graceful shutdown
     const shutdown = (signal: string) => {
       logger.info(`${signal} received, shutting down gracefully...`);
+      abortAllGenerations();
+
       server.close(() => {
+        sessionCleanupTimer.unref();
+        closeDatabase();
         logger.info('HTTP server closed');
         process.exit(0);
       });
 
-      // Force close after 10 seconds
       setTimeout(() => {
         logger.error('Forced shutdown after timeout');
         process.exit(1);
-      }, 10000);
+      }, 10000).unref();
     };
 
     process.on('SIGTERM', () => shutdown('SIGTERM'));
@@ -47,4 +48,4 @@ async function startServer(): Promise<void> {
   }
 }
 
-startServer();
+void startServer();
