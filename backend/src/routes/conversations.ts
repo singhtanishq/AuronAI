@@ -40,13 +40,13 @@ const conversationParamsSchema = z.object({
 });
 
 router.get('/', authMiddleware, validateQuery(listQuerySchema), asyncHandler(async (req: AuthenticatedRequest, res) => {
-  const { page, pageSize, includeArchived } = req.query as { page: number; pageSize: number; includeArchived: boolean };
+  const { page, pageSize, includeArchived } = req.query as unknown as { page: number; pageSize: number; includeArchived: boolean };
   const result = await conversationRepository.listPaginated(req.user!.id, page, pageSize, includeArchived);
   res.json(result);
 }));
 
 router.get('/search', authMiddleware, validateQuery(searchQuerySchema), asyncHandler(async (req: AuthenticatedRequest, res) => {
-  const { q, limit } = req.query as { q: string; limit: number };
+  const { q, limit } = req.query as unknown as { q: string; limit: number };
   const result = await conversationRepository.search(req.user!.id, q, limit);
   res.json(result);
 }));
