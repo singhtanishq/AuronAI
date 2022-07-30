@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useCallback, useMemo } from 'react';
 import { useAuthStore } from '../stores';
-import { api } from '../services/api';
+import { api, setUnauthorizedHandler, ApiError } from '../services/api';
 import type { User } from '../types';
 
 interface AuthContextType {
@@ -22,54 +22,75 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { user, isAuthenticated, isLoading, setAuth, clearAuth, setLoading, updateUser } = useAuthStore();
 
-  const refreshUser = useCallback(async () => {
-    try {
-      const response = await api.auth.me();
-      updateUser(response.user);
-    } catch {
-      clearAuth();
-    }
-  }, [updateUser, clearAuth]);
-
+  // Session restoration relies on the HttpOnly cookie: ask the server who we
+  // are on every load. A cached display profile is only used to ride out
+  // transient network failures, never to authorize anything.
   useEffect(() => {
+    let cancelled = false;
+
     const initAuth = async () => {
-      const token = localStorage.getItem('auron-auth') ? JSON.parse(localStorage.getItem('auron-auth')!).token : null;
-      if (token) {
-        try {
-          const response = await api.auth.me();
-          setAuth(response.user, token);
-        } catch {
+      try {
+        const response = await api.auth.me();
+        if (!cancelled) setAuth(response.user);
+      } catch (error) {
+        if (cancelled) return;
+        if (error instanceof ApiError && error.statusCode === 401) {
+          clearAuth();
+        } else if (useAuthStore.getState().user) {
+          // Backend unreachable: keep the cached profile; protected requests
+          // will surface errors and a later 401 clears state automatically.
+          setLoading(false);
+        } else {
           clearAuth();
         }
-      } else {
-        setLoading(false);
       }
     };
-    initAuth();
+
+    void initAuth();
+    return () => {
+      cancelled = true;
+    };
   }, [setAuth, clearAuth, setLoading]);
+
+  // Any 401 from any request clears stale client auth state once.
+  useEffect(() => {
+    setUnauthorizedHandler(() => useAuthStore.getState().clearAuth());
+    return () => setUnauthorizedHandler(null);
+  }, []);
 
   const login = useCallback(async (email: string, password: string) => {
     const response = await api.auth.login({ email, password });
-    setAuth(response.user, response.token);
+    setAuth(response.user);
   }, [setAuth]);
 
   const signup = useCallback(async (name: string, email: string, password: string, confirmPassword: string) => {
     const response = await api.auth.signup({ name, email, password, confirmPassword });
-    setAuth(response.user, response.token);
+    setAuth(response.user);
   }, [setAuth]);
 
   const logout = useCallback(async () => {
-    await api.auth.logout();
+    // The server may already have invalidated this session; local state is
+    // cleared regardless so the user never gets stuck.
+    try {
+      await api.auth.logout();
+    } catch {
+      // ignore
+    }
     clearAuth();
   }, [clearAuth]);
 
   const logoutAll = useCallback(async () => {
-    await api.auth.logoutAll();
+    try {
+      await api.auth.logoutAll();
+    } catch {
+      // ignore
+    }
     clearAuth();
   }, [clearAuth]);
 
   const changePassword = useCallback(async (currentPassword: string, newPassword: string, confirmPassword: string) => {
     await api.auth.changePassword({ currentPassword, newPassword, confirmPassword });
+    // All sessions were invalidated server-side; drop local state too.
     clearAuth();
   }, [clearAuth]);
 
@@ -83,25 +104,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     clearAuth();
   }, [clearAuth]);
 
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        isAuthenticated,
-        isLoading,
-        login,
-        signup,
-        logout,
-        logoutAll,
-        changePassword,
-        updateProfile,
-        deleteAccount,
-        refreshUser,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+  const refreshUser = useCallback(async () => {
+    const response = await api.auth.me();
+    updateUser(response.user);
+  }, [updateUser]);
+
+  const value = useMemo(
+    () => ({
+      user,
+      isAuthenticated,
+      isLoading,
+      login,
+      signup,
+      logout,
+      logoutAll,
+      changePassword,
+      updateProfile,
+      deleteAccount,
+      refreshUser,
+    }),
+    [user, isAuthenticated, isLoading, login, signup, logout, logoutAll, changePassword, updateProfile, deleteAccount, refreshUser]
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
