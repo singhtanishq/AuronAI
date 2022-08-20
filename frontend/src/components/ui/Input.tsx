@@ -1,4 +1,4 @@
-import React, { forwardRef } from 'react';
+import React, { forwardRef, useId } from 'react';
 import { clsx } from 'clsx';
 import { Eye, EyeOff } from 'lucide-react';
 
@@ -25,20 +25,21 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     },
     ref
   ) => {
-    const inputId = id || label?.toLowerCase().replace(/\s+/g, '-');
+    const generatedId = useId();
+    const inputId = id || generatedId;
     const [showPassword, setShowPassword] = React.useState(false);
     const inputType = showPasswordToggle && showPassword ? 'text' : type;
 
     return (
       <div className="w-full">
         {label && (
-          <label htmlFor={inputId} className="block text-sm font-medium text-text-secondary mb-1.5">
+          <label htmlFor={inputId} className="mb-1.5 block text-sm font-medium text-content-secondary">
             {label}
           </label>
         )}
         <div className="relative">
           {icon && (
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-text-muted">
+            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-content-muted">
               {icon}
             </div>
           )}
@@ -47,13 +48,13 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             id={inputId}
             type={inputType}
             className={clsx(
-              'w-full px-3 py-2 text-sm bg-background-primary border rounded-lg text-text-primary placeholder-text-muted transition-all duration-150',
-              'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent',
-              'disabled:opacity-50 disabled:cursor-not-allowed',
-              'dark:bg-surface-800 dark:border-border-dark dark:focus:ring-primary-400',
-              icon ? 'pl-10' : '',
-              showPasswordToggle ? 'pr-10' : '',
-              error ? 'border-error-DEFAULT focus:ring-error-DEFAULT' : 'border-border-medium',
+              'w-full rounded-lg border bg-surface-primary py-2 text-sm text-content-primary',
+              'placeholder:text-content-muted transition-colors duration-fast',
+              'focus:outline-none focus:ring-2 focus:ring-accent/60 focus:border-transparent',
+              'disabled:cursor-not-allowed disabled:opacity-50',
+              icon ? 'pl-10' : 'pl-3',
+              showPasswordToggle ? 'pr-10' : 'pr-3',
+              error ? 'border-danger' : 'border-line-subtle focus:border-transparent',
               className
             )}
             aria-invalid={error ? 'true' : 'false'}
@@ -63,21 +64,22 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           {showPasswordToggle && (
             <button
               type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute inset-y-0 right-0 pr-3 flex items-center text-text-muted hover:text-text-primary"
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute inset-y-0 right-0 flex items-center pr-3 text-content-muted transition-colors hover:text-content-primary"
               aria-label={showPassword ? 'Hide password' : 'Show password'}
+              tabIndex={-1}
             >
               {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
           )}
         </div>
         {error && (
-          <p id={`${inputId}-error`} className="mt-1.5 text-sm text-error-DEFAULT" role="alert">
+          <p id={`${inputId}-error`} className="mt-1.5 text-sm text-danger" role="alert">
             {error}
           </p>
         )}
         {hint && !error && (
-          <div id={`${inputId}-hint`} className="mt-1.5 text-sm text-text-muted">
+          <div id={`${inputId}-hint`} className="mt-1.5 text-sm text-content-muted">
             {hint}
           </div>
         )}
