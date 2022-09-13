@@ -1,112 +1,82 @@
-import React, { useState, useRef, useEffect, createContext, useContext } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X, CheckCircle, AlertCircle, Info } from 'lucide-react';
 import { clsx } from 'clsx';
+import { useUIStore } from '../../stores';
 
-interface Toast {
+const TOAST_DURATION_MS = 4500;
+
+/** Toasts backed by the UI store so any component can raise one. */
+export function ToastProvider({ children }: { children: React.ReactNode }) {
+  const toasts = useUIStore((s) => s.toasts);
+  const removeToast = useUIStore((s) => s.removeToast);
+
+  return (
+    <>
+      {children}
+      {createPortal(
+        <div
+          className="pointer-events-none fixed bottom-4 right-4 z-[60] flex w-[min(360px,calc(100vw-2rem))] flex-col gap-2"
+          role="region"
+          aria-live="polite"
+          aria-label="Notifications"
+        >
+          {toasts.map((toast) => (
+            <ToastItem key={toast.id} id={toast.id} message={toast.message} type={toast.type} onRemove={removeToast} />
+          ))}
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
+interface ToastItemProps {
   id: string;
   message: string;
   type: 'success' | 'error' | 'info';
+  onRemove: (id: string) => void;
 }
 
-interface ToastContextType {
-  addToast: (message: string, type: 'success' | 'error' | 'info') => void;
-  removeToast: (id: string) => void;
-}
-
-const ToastContext = createContext<ToastContextType | null>(null);
-
-interface ToastProviderProps {
-  children: React.ReactNode;
-}
-
-export function ToastProvider({ children }: ToastProviderProps) {
-  const [toasts, setToasts] = useState<Toast[]>([]);
-
-  const addToast = (message: string, type: 'success' | 'error' | 'info') => {
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-    setToasts((prev) => [...prev, { id, message, type }]);
-  };
-
-  const removeToast = (id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  };
-
-  return (
-    <ToastContext.Provider value={{ addToast, removeToast }}>
-      {children}
-      <ToastContainer toasts={toasts} onRemove={removeToast} />
-    </ToastContext.Provider>
-  );
-}
-
-function ToastContainer({ toasts, onRemove }: { toasts: Toast[]; onRemove: (id: string) => void }) {
-  const containerRef = useRef<HTMLDivElement>(null);
+function ToastItem({ id, message, type, onRemove }: ToastItemProps) {
+  const timerRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
-    if (toasts.length === 0) return;
-    const timer = setTimeout(() => {
-      onRemove(toasts[0].id);
-    }, 4000);
-    return () => clearTimeout(timer);
-  }, [toasts, onRemove]);
+    timerRef.current = setTimeout(() => onRemove(id), TOAST_DURATION_MS);
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [id, onRemove]);
 
-  if (toasts.length === 0) return null;
-
-  return createPortal(
-    <div
-      ref={containerRef}
-      className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"
-      role="region"
-      aria-live="polite"
-      aria-label="Notifications"
-    >
-      {toasts.map((toast) => (
-        <ToastItem key={toast.id} toast={toast} onRemove={onRemove} />
-      ))}
-    </div>,
-    document.body
-  );
-}
-
-function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) => void }) {
   const icons = {
-    success: <CheckCircle size={20} className="text-success-DEFAULT" />,
-    error: <AlertCircle size={20} className="text-error-DEFAULT" />,
-    info: <Info size={20} className="text-primary-500" />,
-  };
-
-  const bgClasses = {
-    success: 'bg-success-light dark:bg-success-dark/20',
-    error: 'bg-error-light dark:bg-error-dark/20',
-    info: 'bg-primary-100 dark:bg-primary-900/30',
+    success: <CheckCircle size={18} className="text-ok" />,
+    error: <AlertCircle size={18} className="text-danger" />,
+    info: <Info size={18} className="text-accent" />,
   };
 
   return (
     <div
       className={clsx(
-        'pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-lg shadow-lg border animate-slide-in-right min-w-[280px] max-w-md',
-        bgClasses[toast.type]
+        'pointer-events-auto flex items-start gap-2.5 rounded-lg border px-3.5 py-3 shadow-lg animate-slide-in-right',
+        'bg-surface-elevated border-line-subtle'
       )}
       role="alert"
     >
-      <div className="flex-shrink-0 mt-0.5">{icons[toast.type]}</div>
-      <p className="flex-1 text-sm text-text-primary">{toast.message}</p>
+      <span className="mt-0.5 shrink-0">{icons[type]}</span>
+      <p className="flex-1 text-sm text-content-primary">{message}</p>
       <button
-        onClick={() => onRemove(toast.id)}
-        className="flex-shrink-0 p-1 text-text-muted hover:text-text-primary transition-colors"
+        onClick={() => onRemove(id)}
+        className="shrink-0 rounded p-0.5 text-content-muted transition-colors hover:text-content-primary"
         aria-label="Dismiss notification"
       >
-        <X size={16} />
+        <X size={14} />
       </button>
     </div>
   );
 }
 
 export function useToast() {
-  const context = useContext(ToastContext);
-  if (!context) {
-    throw new Error('useToast must be used within a ToastProvider');
-  }
-  return context;
+  const addToast = useUIStore((s) => s.addToast);
+  const removeToast = useUIStore((s) => s.removeToast);
+  return { addToast, removeToast };
 }
