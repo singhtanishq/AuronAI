@@ -1,178 +1,140 @@
-import { useState, useRef, useEffect } from 'react';
-import { marked } from 'marked';
-import DOMPurify from 'dompurify';
-import hljs from 'highlight.js';
-import { Copy, RotateCcw, MoreHorizontal, Check } from 'lucide-react';
-import { Avatar, Button, Dropdown, TooltipTrigger } from './ui';
+import React, { memo, useCallback, useMemo, useRef, useState } from 'react';
+import { Copy, Check, RotateCcw, AlertTriangle, Ban } from 'lucide-react';
+import { clsx } from 'clsx';
+import { Avatar, Button, Tooltip } from './ui';
 import type { Message } from '../types';
-import { formatDistanceToNow } from 'date-fns';
-import 'highlight.js/styles/github-dark.min.css';
-
-marked.setOptions({
-  breaks: true,
-  gfm: true,
-});
-
-const renderer = new marked.Renderer();
-
-renderer.code = (code: string, infostring: string | undefined, _escaped: boolean) => {
-  const lang = infostring?.split(' ')[0];
-  const highlighted = lang && hljs.getLanguage(lang)
-    ? hljs.highlight(code, { language: lang }).value
-    : hljs.highlightAuto(code).value;
-
-  return `<div class="code-block relative group">
-    <div class="code-block-header flex items-center justify-between">
-      <span class="text-xs text-text-muted">${lang || 'plaintext'}</span>
-      <button class="code-block-copy btn-ghost p-1.5 text-xs opacity-0 group-hover:opacity-100 transition-opacity" data-code="${encodeURIComponent(code)}" aria-label="Copy code">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 002 2z" /></svg>
-      </button>
-    </div>
-    <pre class="overflow-x-auto rounded-b-lg p-4"><code class="hljs language-${lang || ''}">${highlighted}</code></pre>
-  </div>`;
-};
-
-renderer.blockquote = (quote: string) => {
-  return `<blockquote class="border-l-4 border-primary-500 pl-4 italic text-text-secondary my-2 dark:border-primary-400">${quote}</blockquote>`;
-};
+import { renderMarkdown } from '../utils/markdown';
+import { copyToClipboard, formatTimestamp } from '../utils/format';
+import { useSettingsStore } from '../stores';
 
 interface MessageBubbleProps {
   message: Message;
-  onCopy: () => void;
-  onRegenerate: () => void;
-  onRetry?: () => void;
-  showActions?: boolean;
+  onRegenerate?: (messageId: string) => void;
   isStreaming?: boolean;
 }
 
-export function MessageBubble({ message, onCopy, onRegenerate, onRetry, showActions = true, isStreaming = false }: MessageBubbleProps) {
+/**
+ * One rendered message. Markdown is parsed once per content change and
+ * sanitized; code-block copy buttons inside the rendered HTML are handled via
+ * event delegation on the container.
+ */
+export const MessageBubble = memo(function MessageBubble({
+  message,
+  onRegenerate,
+  isStreaming = false,
+}: MessageBubbleProps) {
+  const isUser = message.role === 'user';
+  const showTimestamps = useSettingsStore((s) => s.preferences?.showTimestamps ?? true);
   const [copied, setCopied] = useState(false);
-  const [showDropdown, setShowDropdown] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const messageRef = useRef<HTMLDivElement>(null);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout>>();
 
-  useEffect(() => {
-    if (messageRef.current) {
-      messageRef.current.querySelectorAll('pre code').forEach((block) => {
-        hljs.highlightElement(block as HTMLElement);
-      });
-    }
+  const html = useMemo(() => (isUser ? null : renderMarkdown(message.content)), [isUser, message.content]);
+
+  const handleCopy = useCallback(async () => {
+    const ok = await copyToClipboard(message.content);
+    if (!ok) return;
+    setCopied(true);
+    if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    copiedTimer.current = setTimeout(() => setCopied(false), 1800);
   }, [message.content]);
 
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setShowDropdown(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+  // Delegated handler for copy buttons inside rendered markdown.
+  const handleContentClick = useCallback(async (e: React.MouseEvent) => {
+    const target = (e.target as HTMLElement).closest<HTMLButtonElement>('.code-block-copy');
+    if (!target) return;
+    const encoded = target.getAttribute('data-code');
+    if (encoded === null) return;
+    const ok = await copyToClipboard(decodeURIComponent(encoded));
+    if (!ok) return;
+    setCopiedCode(encoded);
+    target.textContent = 'Copied';
+    setTimeout(() => {
+      setCopiedCode((current) => (current === encoded ? null : current));
+      target.textContent = 'Copy';
+    }, 1800);
   }, []);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(message.content);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleDropdownAction = (action: 'regenerate' | 'retry') => {
-    setShowDropdown(false);
-    if (action === 'regenerate') onRegenerate();
-    if (action === 'retry' && onRetry) onRetry();
-  };
-
-  const sanitizedHtml = DOMPurify.sanitize(marked.parse(message.content) as string);
+  const canAct = message.status === 'completed' || message.status === 'error' || message.status === 'aborted';
 
   return (
     <div
-      ref={messageRef}
-      className={`flex gap-3 animate-message-enter ${message.role === 'user' ? 'flex-row-reverse' : ''}`}
+      className={clsx('group flex w-full gap-3 animate-message-in', isUser ? 'justify-end' : 'justify-start')}
       data-message-id={message.id}
     >
-      <Avatar
-        name={message.role === 'user' ? 'You' : 'Auron AI'}
-        size="sm"
-        className="mt-1 shrink-0"
-      />
-      <div className={`flex-1 min-w-0 ${message.role === 'user' ? 'text-right' : ''}`}>
-        <div
-          className={`inline-block max-w-[85%] px-4 py-2.5 rounded-2xl ${message.role === 'user'
-            ? 'bg-primary-600 text-white rounded-tr-sm'
-            : 'bg-surface-100 dark:bg-surface-800 text-text-primary rounded-tl-sm'}`}
-        >
-          {message.role === 'assistant' ? (
-            <div
-              className="prose prose-sm dark:prose-invert max-w-none"
-              dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
-            />
-          ) : (
-            <p className="whitespace-pre-wrap break-words">{message.content}</p>
-          )}
-          {message.status === 'error' && (
-            <div className="mt-2 flex items-center gap-2 text-error-DEFAULT text-sm">
-              <span>Failed to generate response</span>
-              <Button variant="ghost" size="sm" onClick={onRetry} icon={<RotateCcw size={14} />}>
+      {!isUser && (
+        <Avatar name="Auron AI" size="sm" className="mt-1 shrink-0" />
+      )}
+
+      <div className={clsx('flex min-w-0 flex-col', isUser ? 'items-end' : 'items-start', 'max-w-[92%] sm:max-w-[85%]')}>
+        {isUser ? (
+          <div className="rounded-2xl rounded-br-md bg-accent-solid px-4 py-2.5 text-white shadow-sm">
+            <p className="whitespace-pre-wrap break-words text-[0.9375rem] leading-relaxed">{message.content}</p>
+          </div>
+        ) : (
+          <div
+            className="w-full min-w-0 cursor-default"
+            onClick={handleContentClick}
+            // Sanitized by renderMarkdown (DOMPurify) before reaching the DOM.
+            dangerouslySetInnerHTML={{ __html: html || '' }}
+          />
+        )}
+
+        {message.status === 'error' && !isUser && (
+          <div className="mt-2 flex items-center gap-2 rounded-lg border border-danger/30 bg-danger-subtle px-3 py-2 text-sm text-danger">
+            <AlertTriangle size={15} className="shrink-0" />
+            <span>Generation failed{message.content ? ' — partial response kept' : ''}.</span>
+            {onRegenerate && (
+              <Button variant="ghost" size="sm" icon={<RotateCcw size={13} />} onClick={() => onRegenerate(message.id)}>
                 Retry
               </Button>
-            </div>
-          )}
-          {message.status === 'aborted' && (
-            <div className="mt-2 text-warning-DEFAULT text-sm">
-              Generation stopped
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
 
-        <div className={`flex items-center gap-1 mt-1.5 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-          {showActions && message.role === 'assistant' && message.status === 'completed' && (
-            <TooltipTrigger content="Copy" delay={0}>
-              <Button
-                variant="ghost"
-                size="sm"
-                icon={copied ? <Check size={16} className="text-success-DEFAULT" /> : <Copy size={16} />}
-                onClick={handleCopy}
-                aria-label="Copy message"
-              />
-            </TooltipTrigger>
-          )}
-          {showActions && message.role === 'assistant' && message.status === 'completed' && (
-            <TooltipTrigger content="Regenerate" delay={0}>
-              <Button
-                variant="ghost"
-                size="sm"
-                icon={<RotateCcw size={16} />}
-                onClick={onRegenerate}
-                aria-label="Regenerate response"
-              />
-            </TooltipTrigger>
-          )}
-          {showActions && message.role === 'assistant' && message.status === 'completed' && (
-            <Dropdown
-              trigger={
-                <TooltipTrigger content="More options" delay={0}>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    icon={<MoreHorizontal size={16} />}
-                    aria-label="More options"
-                  />
-                </TooltipTrigger>
-              }
-              items={[
-                { label: 'Regenerate', icon: <RotateCcw size={16} />, onClick: () => handleDropdownAction('regenerate') },
-                { label: 'Retry', icon: <RotateCcw size={16} />, onClick: () => handleDropdownAction('retry') },
-                { label: 'Copy', icon: <Copy size={16} />, onClick: () => { handleCopy(); setShowDropdown(false); } },
-              ]}
-              align="right"
-            />
-          )}
-          {message.status === 'completed' && (
-            <span className="text-xs text-text-muted px-1">
-              {formatDistanceToNow(new Date(message.createdAt), { addSuffix: true })}
-            </span>
-          )}
-        </div>
+        {message.status === 'aborted' && !isUser && (
+          <div className="mt-2 flex items-center gap-2 text-sm text-warn">
+            <Ban size={14} className="shrink-0" />
+            <span>Generation stopped{message.content ? ' — partial response kept' : ''}.</span>
+          </div>
+        )}
+
+        {isStreaming && (
+          <span className="ml-0.5 mt-1 inline-block h-4 w-[2px] animate-blink bg-accent" aria-hidden="true" />
+        )}
+
+        {canAct && !isStreaming && (
+          <div className={clsx('mt-1 flex items-center gap-0.5 transition-opacity', 'sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100')}>
+            {!isUser && (
+              <Tooltip content={copied ? 'Copied' : 'Copy message'}>
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  className="icon-btn"
+                  aria-label="Copy message"
+                >
+                  {copied ? <Check size={15} className="text-ok" /> : <Copy size={15} />}
+                </button>
+              </Tooltip>
+            )}
+            {!isUser && onRegenerate && message.status !== 'error' && (
+              <Tooltip content="Regenerate">
+                <button
+                  type="button"
+                  onClick={() => onRegenerate(message.id)}
+                  className="icon-btn"
+                  aria-label="Regenerate response"
+                >
+                  <RotateCcw size={15} />
+                </button>
+              </Tooltip>
+            )}
+            {showTimestamps && (
+              <span className="px-1 text-xs text-content-muted">{formatTimestamp(message.createdAt)}</span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
-}
+});
