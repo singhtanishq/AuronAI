@@ -1,100 +1,74 @@
-import { Sparkles, Code, Lightbulb, BookOpen, Mail, Calendar, Zap } from 'lucide-react';
-import { Button } from './ui';
+import { Cpu, MessageSquare, Sparkles, Code2, Lightbulb, BookOpen, PenLine, CalendarClock } from 'lucide-react';
+import { clsx } from 'clsx';
+import { useSettingsStore } from '../stores';
 
 const PROMPT_SUGGESTIONS = [
-  {
-    icon: Sparkles,
-    title: 'Explain quantum computing simply',
-    description: 'Get a clear explanation of complex topics',
-    prompt: 'Explain quantum computing in simple terms',
-  },
-  {
-    icon: Code,
-    title: 'Help me write a React authentication flow',
-    description: 'Get coding assistance and best practices',
-    prompt: 'Help me write a React authentication flow with hooks',
-  },
-  {
-    icon: Lightbulb,
-    title: 'Brainstorm ideas for a side project',
-    description: 'Creative brainstorming and ideation',
-    prompt: 'Brainstorm 10 creative side project ideas for a developer',
-  },
-  {
-    icon: BookOpen,
-    title: 'Teach me JavaScript closures',
-    description: 'Learn programming concepts step by step',
-    prompt: 'Teach me JavaScript closures with practical examples',
-  },
-  {
-    icon: Mail,
-    title: 'Write a professional email',
-    description: 'Draft emails, messages, and communications',
-    prompt: 'Write a professional follow-up email after a job interview',
-  },
-  {
-    icon: Calendar,
-    title: 'Help me plan my week',
-    description: 'Productivity planning and organization',
-    prompt: 'Help me create a productive weekly schedule',
-  },
+  { icon: Sparkles, title: 'Explain a complex topic', prompt: 'Explain quantum computing in simple terms' },
+  { icon: Code2, title: 'Write some code', prompt: 'Write a TypeScript debounce function with tests' },
+  { icon: Lightbulb, title: 'Brainstorm ideas', prompt: 'Brainstorm 10 creative side project ideas for a developer' },
+  { icon: BookOpen, title: 'Learn something', prompt: 'Teach me JavaScript closures with practical examples' },
+  { icon: PenLine, title: 'Draft a message', prompt: 'Write a professional follow-up email after a job interview' },
+  { icon: CalendarClock, title: 'Make a plan', prompt: 'Help me create a productive weekly schedule' },
 ];
 
-export function Welcome({ onSelectPrompt }: { onSelectPrompt: (prompt: string) => void }) {
+interface WelcomeProps {
+  onSelectPrompt: (prompt: string) => void;
+  compact?: boolean;
+}
+
+export function Welcome({ onSelectPrompt, compact = false }: WelcomeProps) {
+  const ollamaHealthy = useSettingsStore((s) => s.ollamaHealthy);
+
   return (
-    <div className="flex flex-col items-center justify-center h-full px-4 text-center">
-      <div className="max-w-2xl space-y-8">
-        <div className="space-y-4 animate-fade-in">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-primary-600 mx-auto mb-4">
-            <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.514 15.782 3 14.128 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+    <div className="flex flex-1 items-center justify-center overflow-y-auto px-4 py-8">
+      <div className="w-full max-w-2xl space-y-8 text-center">
+        <div className={clsx('space-y-4', compact ? 'pt-6' : 'pt-10')}>
+          <div className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-accent-solid shadow-lg shadow-accent/20">
+            <svg className="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4.255-.949L3 20l1.395-3.72C3.514 15.782 3 14.128 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+              />
             </svg>
           </div>
           <div>
-            <h1 className="text-4xl font-bold text-text-primary tracking-tight">
-              Welcome to Auron AI
+            <h1 className="text-3xl font-bold tracking-tight text-content-primary">
+              {compact ? 'How can I help?' : 'Welcome to Auron AI'}
             </h1>
-            <p className="mt-2 text-lg text-text-secondary">
-              Powered by Tanishq Singh
+            <p className="mt-2 text-base text-content-secondary">
+              Your local AI assistant — private, offline-capable, and running entirely on your machine.
             </p>
           </div>
         </div>
 
-        <div className="animate-slide-up">
-          <p className="text-xl text-text-tertiary max-w-md mx-auto">
-            Ask me anything. I&apos;m your local AI assistant running entirely on your machine.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 animate-slide-up">
-          {PROMPT_SUGGESTIONS.map((suggestion, index) => (
+        <div className="grid grid-cols-1 gap-2.5 text-left sm:grid-cols-2">
+          {PROMPT_SUGGESTIONS.map((suggestion) => (
             <button
-              key={index}
+              key={suggestion.prompt}
+              type="button"
               onClick={() => onSelectPrompt(suggestion.prompt)}
-              className="relative p-4 text-left rounded-xl border border-border-light hover:border-primary-300 dark:hover:border-primary-700 hover:bg-surface-50 dark:hover:bg-surface-800/50 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-              style={{ animationDelay: `${index * 50}ms` }}
+              className="group flex items-center gap-3 rounded-xl border border-line-subtle bg-surface-primary p-3.5 text-left transition-all duration-fast ease-out hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
-                  <suggestion.icon className="w-5 h-5 text-primary-600 dark:text-primary-400" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-medium text-text-primary truncate">{suggestion.title}</h3>
-                  <p className="mt-0.5 text-sm text-text-muted">{suggestion.description}</p>
-                </div>
-              </div>
-              <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                <Zap className="w-4 h-4 text-primary-500" />
-              </div>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-subtle text-accent">
+                <suggestion.icon size={17} />
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium text-content-primary">{suggestion.title}</span>
+                <span className="block truncate text-xs text-content-muted">{suggestion.prompt}</span>
+              </span>
             </button>
           ))}
         </div>
 
-        <div className="animate-fade-in pt-4 border-t border-border-light dark:border-border-dark">
-          <p className="text-sm text-text-muted">
-            Running locally via Ollama &middot; Your data stays on your device
-          </p>
-        </div>
+        <p className="flex items-center justify-center gap-1.5 text-xs text-content-muted">
+          <Cpu size={12} className={ollamaHealthy ? 'text-ok' : 'text-warn'} />
+          {ollamaHealthy
+            ? 'Running locally via Ollama · your data never leaves this device'
+            : 'Waiting for Ollama · start it with `ollama serve`'}
+          <MessageSquare size={12} className="ml-1 opacity-0" aria-hidden="true" />
+        </p>
       </div>
     </div>
   );
