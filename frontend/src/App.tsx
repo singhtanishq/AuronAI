@@ -1,7 +1,7 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
-import { useConversationStore, useSettingsStore } from './stores';
+import { useSettingsStore } from './stores';
 import { api } from './services/api';
 import { Sidebar } from './components/Sidebar';
 import { ChatArea } from './components/ChatArea';
@@ -17,11 +17,9 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (isLoading) {
     return <LoadingScreen />;
   }
-
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
-
   return <>{children}</>;
 }
 
@@ -31,56 +29,52 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
   if (isLoading) {
     return <LoadingScreen />;
   }
-
   if (isAuthenticated) {
     return <Navigate to="/chat" replace />;
   }
-
   return <>{children}</>;
 }
 
+/**
+ * Authenticated shell: sidebar plus the routed content. Loads the user's
+ * preferences and the Ollama model/health snapshot once per session.
+ */
 function MainLayout() {
-  const { preferences, setPreferences, models, ollamaHealthy, setModels, setOllamaHealthy } = useSettingsStore();
-  const { conversations, setConversations, setPinnedConversations } = useConversationStore();
   const { isAuthenticated } = useAuth();
+  const loadedForUser = useRef(false);
 
-  // Load settings and conversations on auth
   useEffect(() => {
-    if (isAuthenticated) {
-      const loadData = async () => {
-        try {
-          const [prefsRes, convRes, modelsRes, healthRes] = await Promise.allSettled([
-            api.settings.get(),
-            api.conversations.list({ page: 1, pageSize: 50 }),
-            api.ai.models(),
-            api.ai.health(),
-          ]);
-
-          if (prefsRes.status === 'fulfilled') {
-            setPreferences(prefsRes.value.preferences);
-          }
-          if (convRes.status === 'fulfilled') {
-            setConversations(convRes.value.data);
-            setPinnedConversations(convRes.value.data.filter(c => c.pinned));
-          }
-          if (modelsRes.status === 'fulfilled') {
-            setModels(modelsRes.value.models);
-          }
-          if (healthRes.status === 'fulfilled') {
-            setOllamaHealthy(healthRes.value.ai.reachable);
-          }
-        } catch (error) {
-          console.error('Failed to load initial data:', error);
-        }
-      };
-      loadData();
+    if (!isAuthenticated) {
+      loadedForUser.current = false;
+      return;
     }
-  }, [isAuthenticated, setPreferences, setConversations, setPinnedConversations, setModels, setOllamaHealthy]);
+    if (loadedForUser.current) return;
+    loadedForUser.current = true;
+
+    void (async () => {
+      const [prefsRes, modelsRes, healthRes] = await Promise.allSettled([
+        api.settings.get(),
+        api.ai.models(),
+        api.ai.health(),
+      ]);
+
+      const settingsStore = useSettingsStore.getState();
+      if (prefsRes.status === 'fulfilled') {
+        settingsStore.setPreferences(prefsRes.value.preferences);
+      }
+      if (healthRes.status === 'fulfilled') {
+        settingsStore.setOllamaHealthy(healthRes.value.ai.reachable);
+      }
+      if (modelsRes.status === 'fulfilled') {
+        settingsStore.setModels(modelsRes.value.models);
+      }
+    })();
+  }, [isAuthenticated]);
 
   return (
-    <div className="flex h-screen bg-background-primary dark:bg-background-primary">
+    <div className="flex h-full overflow-hidden bg-background-primary">
       <Sidebar />
-      <main className="flex-1 flex flex-col min-w-0 lg:ml-0">
+      <main className="flex min-w-0 flex-1 flex-col">
         <Outlet />
       </main>
     </div>
@@ -103,8 +97,8 @@ function App() {
         <Route path="/chat/:conversationId" element={<ChatArea />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/" element={<Navigate to="/chat" replace />} />
       </Route>
+      <Route path="/" element={<Navigate to="/chat" replace />} />
       <Route path="*" element={<Navigate to="/chat" replace />} />
     </Routes>
   );
