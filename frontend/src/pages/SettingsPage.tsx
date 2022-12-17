@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { clsx } from 'clsx';
-import { Cpu, Monitor, Moon, Sun, Database, ShieldCheck, Wifi, AlertCircle, Check } from 'lucide-react';
-import { useSettingsStore } from '../stores';
+import { Cpu, Monitor, Moon, Sun, Database, ShieldCheck, Wifi, AlertCircle } from 'lucide-react';
+import { useSettingsStore, useUIStore, useConversationStore, useChatStore } from '../stores';
 import { useTheme, usePreferences } from '../contexts/ThemeContext';
 import { useToast } from '../components/ui/Toast';
-import { Button, Input, Textarea, ConfirmDialog, Modal } from '../components/ui';
+import { Button, Input, Textarea, ConfirmDialog } from '../components/ui';
 import { api } from '../services/api';
 import { formatModelSize } from '../utils/format';
 import type { Theme } from '../types';
@@ -167,7 +167,7 @@ function AppearanceSection() {
           description="Start with the sidebar collapsed on wide screens"
           checked={preferences?.sidebarCollapsed ?? false}
           onChange={(value) => {
-            useUIStoreSetSidebar(value);
+            useUIStore.getState().setSidebarCollapsed(value);
             void updatePreference('sidebarCollapsed', value).catch(() => {
               addToast('Could not save the sidebar preference', 'error');
             });
@@ -176,10 +176,6 @@ function AppearanceSection() {
       </Section>
     </>
   );
-}
-
-function useUIStoreSetSidebar(): (v: boolean) => void {
-  return (v: boolean) => import('../stores').then(({ useUIStore }) => useUIStore.getState().setSidebarCollapsed(v));
 }
 
 /* ---------------------------------- chat ---------------------------------- */
@@ -364,7 +360,9 @@ function DataSection() {
     setIsDeleting(true);
     try {
       const response = await api.conversations.deleteAll();
-      useConversationStoreReset();
+      useConversationStore.getState().setConversations([]);
+      useConversationStore.getState().clearActiveConversation();
+      useChatStore.getState().endGeneration('');
       addToast(`Deleted ${response.count} conversation${response.count === 1 ? '' : 's'}`, 'success');
       setShowDeleteAll(false);
     } catch {
@@ -425,29 +423,3 @@ function DataFact({ icon, title, body }: { icon: React.ReactNode; title: string;
     </div>
   );
 }
-
-async function useConversationStoreReset(): Promise<void> {
-  const { useConversationStore, useChatStore } = await import('../stores');
-  useConversationStore.getState().setConversations([]);
-  useConversationStore.getState().clearActiveConversation();
-  useChatStore.getState().endGeneration('');
-}
-
-async function useUIStoreSetSidebarWrapper(): Promise<void> {
-  const { useUIStore } = await import('../stores');
-  useUIStore.getState().toggleSidebar();
-}
-
-function useUIStoreSetSidebarFn(): (value: boolean) => void {
-  return (value: boolean) => {
-    void useUIStoreSetSidebarWrapper;
-    void value;
-  };
-}
-
-const useUIStoreSetSidebar = function (value: boolean): void {
-  void import('../stores').then(({ useUIStore }) => useUIStore.getState().setSidebarCollapsed(value));
-  void useUIStoreSetSidebarFn;
-};
-
-export { Check };
