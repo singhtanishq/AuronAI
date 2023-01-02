@@ -162,7 +162,12 @@ interface ConfirmDialogProps {
   confirmLabel?: string;
   cancelLabel?: string;
   danger?: boolean;
+  /** When set, the confirm button stays disabled until the phrase is typed. */
   requireText?: string;
+  /** Optional custom input (e.g. a password field) rendered above the actions. */
+  customInput?: React.ReactNode;
+  /** Disable confirm until customInput is considered valid by the caller. */
+  confirmDisabled?: boolean;
   loading?: boolean;
 }
 
@@ -177,6 +182,8 @@ export function ConfirmDialog({
   cancelLabel = 'Cancel',
   danger = false,
   requireText,
+  customInput,
+  confirmDisabled = false,
   loading = false,
 }: ConfirmDialogProps) {
   const [typed, setTyped] = React.useState('');
@@ -185,7 +192,7 @@ export function ConfirmDialog({
     if (isOpen) setTyped('');
   }, [isOpen]);
 
-  const blocked = Boolean(requireText) && typed !== requireText;
+  const blocked = (Boolean(requireText) && typed !== requireText) || confirmDisabled;
 
   return (
     <Modal
@@ -197,7 +204,13 @@ export function ConfirmDialog({
       closeOnOverlayClick={!loading}
       showCloseButton={!loading}
     >
-      <div className="space-y-4">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!blocked && !loading) onConfirm();
+        }}
+        className="space-y-4"
+      >
         {requireText && (
           <input
             type="text"
@@ -209,15 +222,16 @@ export function ConfirmDialog({
             className="w-full rounded-lg border border-line-subtle bg-surface-primary px-3 py-2 text-sm text-content-primary placeholder:text-content-muted focus:outline-none focus:ring-2 focus:ring-accent/60"
           />
         )}
+        {customInput}
         <div className="flex justify-end gap-2.5">
-          <Button variant="secondary" onClick={onClose} disabled={loading}>
+          <Button variant="secondary" type="button" onClick={onClose} disabled={loading}>
             {cancelLabel}
           </Button>
-          <Button variant={danger ? 'danger' : 'primary'} onClick={onConfirm} disabled={blocked} loading={loading}>
+          <Button variant={danger ? 'danger' : 'primary'} type="submit" disabled={blocked} loading={loading}>
             {confirmLabel}
           </Button>
         </div>
-      </div>
+      </form>
     </Modal>
   );
 }
