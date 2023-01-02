@@ -347,41 +347,26 @@ function DangerZoneSection() {
   const { user, deleteAccount } = useAuth();
   const { addToast } = useToast();
   const [showConfirm, setShowConfirm] = useState(false);
+  const [password, setPassword] = useState('');
   const [deleting, setDeleting] = useState(false);
-
-  const handleDelete = async () => {
-    if (!deleteTargetPassword) return;
-    setDeleting(true);
-    try {
-      await deleteAccount(deleteTargetPassword);
-      addToast('Account deleted', 'success');
-    } catch (err) {
-      addToast(err instanceof Error ? err.message : 'Failed to delete account', 'error');
-      setDeleting(false);
-      setShowConfirm(false);
-    }
-  };
-
-  const [deleteTargetPassword, setDeleteTargetPassword] = useState('');
-  const DeleteDialog = (
-    <ConfirmDialog
-      isOpen={showConfirm}
-      onClose={() => setShowConfirm(false)}
-      onConfirm={() => void handleDelete()}
-      title="Delete account?"
-      description="Your account, conversations, messages, and preferences will be permanently removed from this device."
-      confirmLabel="Delete account"
-      danger
-      requireText="DELETE"
-      loading={deleting}
-    />
-  );
+  const [error, setError] = useState('');
 
   if (!user) return null;
 
+  const handleDelete = async () => {
+    setDeleting(true);
+    setError('');
+    try {
+      await deleteAccount(password);
+      addToast('Account deleted', 'success');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete account.');
+      setDeleting(false);
+    }
+  };
+
   return (
-    <Section title="Danger zone" description="These actions are permanent.">
-      {DeleteDialog}
+    <Section title="Danger zone" description="This action is permanent.">
       <div className="rounded-lg border border-danger/30 bg-danger-subtle/40 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -394,7 +379,8 @@ function DangerZoneSection() {
             variant="danger"
             icon={<Trash2 size={15} />}
             onClick={() => {
-              setDeleteTargetPassword('');
+              setPassword('');
+              setError('');
               setShowConfirm(true);
             }}
           >
@@ -402,6 +388,31 @@ function DangerZoneSection() {
           </Button>
         </div>
       </div>
+
+      <ConfirmDialog
+        isOpen={showConfirm}
+        onClose={() => (deleting ? undefined : setShowConfirm(false))}
+        onConfirm={() => void handleDelete()}
+        title="Delete account?"
+        description="Your account, conversations, messages, and preferences will be permanently removed from this device. Enter your password to confirm."
+        confirmLabel="Delete account"
+        danger
+        loading={deleting}
+        customInput={
+          <div className="space-y-3">
+            <Input
+              label="Password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              autoFocus
+              disabled={deleting}
+              error={error || undefined}
+            />
+          </div>
+        }
+      />
     </Section>
   );
 }
