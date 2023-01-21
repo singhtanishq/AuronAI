@@ -397,6 +397,7 @@ function DangerZoneSection() {
         description="Your account, conversations, messages, and preferences will be permanently removed from this device. Enter your password to confirm."
         confirmLabel="Delete account"
         danger
+        confirmDisabled={!password || deleting}
         loading={deleting}
         customInput={
           <div className="space-y-3">
