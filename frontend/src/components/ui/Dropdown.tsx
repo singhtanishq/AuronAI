@@ -117,14 +117,15 @@ export function Dropdown({ trigger, items, align = 'right', width }: DropdownPro
 
     document.addEventListener('mousedown', handleClickOutside);
     document.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('resize', closeMenu);
-    window.addEventListener('scroll', closeMenu, true);
+    const closeWithoutFocus = () => closeMenu();
+    window.addEventListener('resize', closeWithoutFocus);
+    window.addEventListener('scroll', closeWithoutFocus, true);
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('resize', closeMenu);
-      window.removeEventListener('scroll', closeMenu, true);
+      window.removeEventListener('resize', closeWithoutFocus);
+      window.removeEventListener('scroll', closeWithoutFocus, true);
     };
   }, [isOpen, closeMenu]);
 
