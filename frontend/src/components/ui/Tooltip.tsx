@@ -4,14 +4,14 @@ import { createPortal } from 'react-dom';
 interface TooltipProps {
   content: string;
   children: React.ReactNode;
-  placement?: 'top' | 'bottom';
+  placement?: 'top' | 'bottom' | 'left' | 'right';
   delay?: number;
 }
 
 interface Position {
   top: number;
   left: number;
-  placement: 'top' | 'bottom';
+  placement: 'top' | 'bottom' | 'left' | 'right';
 }
 
 /**
@@ -31,8 +31,27 @@ export function Tooltip({ content, children, placement = 'top', delay = 250 }: T
       const el = wrapperRef.current?.firstElementChild as HTMLElement | null;
       if (!el) return;
       const rect = el.getBoundingClientRect();
-      const top = placement === 'top' ? rect.top - 8 : rect.bottom + 8;
-      const left = Math.max(8, Math.min(rect.left + rect.width / 2, window.innerWidth - 8));
+      let top: number;
+      let left: number;
+      switch (placement) {
+        case 'bottom':
+          top = rect.bottom + 8;
+          left = rect.left + rect.width / 2;
+          break;
+        case 'left':
+          top = rect.top + rect.height / 2;
+          left = rect.left - 8;
+          break;
+        case 'right':
+          top = rect.top + rect.height / 2;
+          left = rect.right + 8;
+          break;
+        case 'top':
+        default:
+          top = rect.top - 8;
+          left = rect.left + rect.width / 2;
+          break;
+      }
       setPosition({ top, left, placement });
       setVisible(true);
     }, delay);
@@ -65,11 +84,11 @@ export function Tooltip({ content, children, placement = 'top', delay = 250 }: T
             <div
               id={tooltipId}
               role="tooltip"
-              className="pointer-events-none fixed z-[70] -translate-x-1/2 whitespace-nowrap rounded-md bg-content-primary px-2 py-1 text-xs font-medium text-background-primary shadow-md animate-fade-in"
+              className="pointer-events-none fixed z-[70] whitespace-nowrap rounded-md bg-content-primary px-2 py-1 text-xs font-medium text-background-primary shadow-md animate-fade-in"
               style={{
                 top: position.top,
                 left: position.left,
-                transform: `translate(-50%, ${position.placement === 'top' ? '-100%' : '0'})`,
+                transform: TOOLTIP_TRANSFORMS[position.placement],
               }}
             >
               {content}
@@ -80,3 +99,10 @@ export function Tooltip({ content, children, placement = 'top', delay = 250 }: T
     </>
   );
 }
+
+const TOOLTIP_TRANSFORMS: Record<Position['placement'], string> = {
+  top: 'translate(-50%, -100%)',
+  bottom: 'translate(-50%, 0)',
+  left: 'translate(-100%, -50%)',
+  right: 'translate(0, -50%)',
+};
