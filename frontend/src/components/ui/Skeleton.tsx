@@ -33,7 +33,7 @@ export function SkeletonText({ lines = 3, className = '' }: { lines?: number; cl
 export function SkeletonMessage({ className = '' }: { className?: string }) {
   return (
     <div className={clsx('flex gap-3', className)}>
-      <Skeleton variant="circular" width={32} height={32} className="mt-1 shrink-0 rounded-full" />
+      <Skeleton width={32} height={32} className="mt-1 shrink-0 rounded-full" />
       <div className="min-w-0 flex-1 space-y-2 pt-1">
         <Skeleton height={12} width="35%" />
         <SkeletonText lines={2} />
