@@ -2,12 +2,12 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 import { Cpu, Monitor, Moon, Sun, Database, ShieldCheck, Wifi, AlertCircle } from 'lucide-react';
 import { useSettingsStore, useUIStore, useConversationStore, useChatStore } from '../stores';
-import { useTheme, usePreferences } from '../contexts/ThemeContext';
+import { useTheme, usePreferences, type Theme } from '../contexts/ThemeContext';
 import { useToast } from '../components/ui/Toast';
 import { Button, Textarea, ConfirmDialog } from '../components/ui';
 import { api } from '../services/api';
 import { formatModelSize } from '../utils/format';
-import type { Theme } from '../types';
+
 
 type TabId = 'appearance' | 'chat' | 'model' | 'data';
 
