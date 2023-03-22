@@ -1,5 +1,5 @@
 import DOMPurify from 'dompurify';
-import hljs from 'highlight.js';
+import hljs from './highlight';
 import { marked } from 'marked';
 
 /**
