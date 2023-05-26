@@ -1,11 +1,25 @@
 import { ensureTestDb, resetTestData } from './setup';
 import { createApp } from '../app';
 import { setAIProvider, resetAIProvider } from '../providers';
-import { SseParser } from '../utils/sse';
-import type { AIProvider, ProviderError } from '../providers/aiProvider';
+import type { AIProvider } from '../providers/aiProvider';
 import type { ChatRequest, ModelInfo, ProviderHealth, StreamChunk, StreamResult } from '../types';
 import type { Server } from 'http';
 import type { AddressInfo } from 'net';
+
+/** Minimal SSE frame parser for tests: extracts data-frame JSON payloads. */
+function parseSse(text: string): Array<Record<string, unknown>> {
+  const events: Array<Record<string, unknown>> = [];
+  for (const frame of text.split(/\r?\n\r?\n/)) {
+    const dataLines = frame.split(/\r?\n/).filter((line) => line.startsWith('data:'));
+    if (dataLines.length === 0) continue;
+    try {
+      events.push(JSON.parse(dataLines.map((l) => l.slice(5).trim()).join('\n')));
+    } catch {
+      // ignore malformed frames
+    }
+  }
+  return events;
+}
 
 class ScriptedProvider implements AIProvider {
   name = 'mock';
@@ -40,9 +54,7 @@ class ScriptedProvider implements AIProvider {
 
 async function readSse(response: globalThis.Response): Promise<Array<Record<string, unknown>>> {
   const text = await response.text();
-  const parser = new SseParser();
-  const events = parser.push(text).concat(parser.flush());
-  return events as unknown as Array<Record<string, unknown>>;
+  return parseSse(text);
 }
 
 describe('HTTP API', () => {
