@@ -52,9 +52,20 @@ function getDummyHash(): Promise<string> {
 }
 
 export const userRepository = {
-  async create(name: string, email: string, password: string): Promise<UserPublic> {
+  async hashPassword(password: string): Promise<string> {
+    return argon2.hash(password, ARGON2_OPTIONS);
+  },
+
+  /**
+   * Insert a fully-prepared user record. Synchronous so it can run inside a
+   * SQLite transaction; password hashing happens before the transaction.
+   */
+  insertUser(input: {
+    name: string;
+    email: string;
+    passwordHash: string;
+  }): UserPublic {
     const id = uuidv4();
-    const passwordHash = await argon2.hash(password, ARGON2_OPTIONS);
 
     const avatarColors = [
       '#6366f1', '#8b5cf6', '#ec4899', '#ef4444',
@@ -69,13 +80,18 @@ export const userRepository = {
         `INSERT INTO users (id, name, email, password_hash, avatar_color, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)`
       )
-      .run(id, name, email.toLowerCase(), passwordHash, avatarColor, timestamp, timestamp);
+      .run(id, input.name, input.email.toLowerCase(), input.passwordHash, avatarColor, timestamp, timestamp);
 
     const user = getDatabase()
       .prepare(`SELECT ${selectUserPublic} FROM users WHERE id = ?`)
       .get(id) as any;
     logger.info(`User created: ${id}`);
     return rowToUserPublic(user);
+  },
+
+  async create(name: string, email: string, password: string): Promise<UserPublic> {
+    const passwordHash = await argon2.hash(password, ARGON2_OPTIONS);
+    return this.insertUser({ name, email, passwordHash });
   },
 
   async findByEmail(email: string): Promise<User | null> {
