@@ -60,15 +60,17 @@ export const authService = {
 
     // User and default preferences are created atomically: a failure must not
     // leave a partial account behind. Password hashing happens before the
-    // transaction because SQLite transactions are synchronous.
+    // transaction because SQLite transactions are synchronous — the callback
+    // below must never await (preferencesRepository.create has a fully
+    // synchronous body, so invoking it without await is safe here).
     const passwordHash = await userRepository.hashPassword(password);
-    const user = await withTransaction(async () => {
+    const user = withTransaction(() => {
       const created = userRepository.insertUser({
         name: name.trim(),
         email: normalizedEmail,
         passwordHash,
       });
-      await preferencesRepository.create(created.id);
+      void preferencesRepository.create(created.id);
       return created;
     });
 
@@ -244,10 +246,11 @@ export const authService = {
       throw new AuthError('Password is incorrect', 'INVALID_CREDENTIALS');
     }
 
-    await withTransaction(async () => {
-      await userRepository.deleteUserSessions(userId);
-      await preferencesRepository.delete(userId);
-      await userRepository.delete(userId); // cascades to conversations and messages
+    // All related rows are removed atomically (synchronous bodies).
+    withTransaction(() => {
+      userRepository.deleteUserSessions(userId);
+      void preferencesRepository.delete(userId);
+      userRepository.delete(userId); // cascades to conversations and messages
     });
 
     logger.info(`Account deleted: ${userId}`);
