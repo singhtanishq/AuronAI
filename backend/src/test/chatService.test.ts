@@ -211,6 +211,7 @@ describe('chatService', () => {
   });
 
   it('validates generation ownership on abort', async () => {
+    mock.queue(['done'], { status: 'completed', content: '' });
     const first = await chatService.sendMessage({ userId, message: 'to abort', model: 'mock-model' });
     expect(first.status).toBe('completed');
 
@@ -247,30 +248,31 @@ describe('chatService', () => {
   });
 
   it('enforces the per-user concurrent generation limit', async () => {
-    // A script whose stream never completes until aborted keeps the slot busy.
-    let release: () => void = () => undefined;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
+    // Streams that stay pending until released keep slots busy deterministically.
+    const gates: Array<() => void> = [];
     const blockingProvider: AIProvider = {
       ...mock,
       name: 'blocking',
       stream: async (_request, _onChunk, signal) => {
-        await gate;
+        await new Promise<void>((resolve) => {
+          gates.push(resolve);
+        });
         if (signal?.aborted) return { status: 'aborted', content: '' };
         return { status: 'completed', content: '' };
       },
     };
     setAIProvider(blockingProvider);
 
-    const firstPromise = chatService.sendMessage({ userId, message: 'long running', model: 'mock-model' });
+    const first = chatService.sendMessage({ userId, message: 'long running one', model: 'mock-model' });
+    const second = chatService.sendMessage({ userId, message: 'long running two', model: 'mock-model' });
 
     await expect(
-      chatService.sendMessage({ userId, message: 'second concurrent', model: 'mock-model' })
+      chatService.sendMessage({ userId, message: 'third concurrent', model: 'mock-model' })
     ).rejects.toThrow('generation in progress');
 
-    release();
-    await firstPromise;
+    gates.forEach((releaseGate) => releaseGate());
+    const results = await Promise.all([first, second]);
+    expect(results.map((r) => r.status)).toEqual(['completed', 'completed']);
   });
 
   it('estimates token counts and generation time metadata', async () => {
