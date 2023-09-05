@@ -46,9 +46,11 @@ describe('renderMarkdown', () => {
     document.body.removeChild(container);
   });
 
-  it('labels unknown languages as text', () => {
+  it('labels unknown languages with their declared name', () => {
     const html = renderMarkdown('```obscurelang\nfoo\n```');
-    expect(html).toContain('code-block-lang">text</span>');
+    expect(html).toContain('code-block-lang">obscurelang</span>');
+    // Unknown languages are escaped, not auto-highlighted.
+    expect(html).toContain('<code class="hljs">foo</code>');
   });
 });
 
