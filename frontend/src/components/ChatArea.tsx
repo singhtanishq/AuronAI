@@ -30,7 +30,6 @@ export function ChatArea() {
   const activeConversation = useConversationStore((s) => s.activeConversation);
   const activeConversationId = useConversationStore((s) => s.activeConversationId);
   const isLoadingConversation = useConversationStore((s) => s.isLoadingConversation);
-  const setMessages = useConversationStore((s) => s.setMessages);
   const setActiveConversation = useConversationStore((s) => s.setActiveConversation);
   const addMessage = useConversationStore((s) => s.addMessage);
   const updateMessage = useConversationStore((s) => s.updateMessage);
@@ -382,7 +381,6 @@ export function ChatArea() {
       if (!targetId) {
         try {
           const response = await api.conversations.create();
-          const now = new Date().toISOString();
           addConversation({
             ...response.conversation,
             messageCount: 0,
