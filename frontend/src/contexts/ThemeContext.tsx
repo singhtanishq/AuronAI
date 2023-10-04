@@ -1,5 +1,4 @@
-import React, { createContext, useContext, useEffect, useCallback, useMemo, useState } from 'react';
-import { useUIStore, useSettingsStore } from '../stores';
+import React, { createContext, useContext, useEffect, useCallback, useMemo, useState } from 'react';import { useUIStore, useSettingsStore } from '../stores';
 import { api } from '../services/api';
 import { useAuth } from './AuthContext';
 import type { UserPreferences } from '../types';
