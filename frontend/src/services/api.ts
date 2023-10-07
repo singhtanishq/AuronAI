@@ -134,10 +134,15 @@ async function streamSse(
   const decoder = new TextDecoder();
 
   try {
-    while (true) {
+    let reading = true;
+    while (reading) {
       const { done, value } = await reader.read();
       if (done) break;
       for (const event of parser.push(decoder.decode(value, { stream: true }))) {
+        if (event.type === 'done' || event.type === 'error' || event.type === 'aborted') {
+          // Terminal event: stop reading, the server closes the stream next.
+          reading = false;
+        }
         onEvent(event);
       }
     }
