@@ -194,7 +194,8 @@ export class OllamaProvider implements AIProvider {
 
     try {
       armIdleTimer();
-      while (true) {
+      let reading = true;
+      while (reading) {
         const { done, value } = await reader.read();
         if (done) break;
         armIdleTimer();
@@ -228,6 +229,7 @@ export class OllamaProvider implements AIProvider {
             return { status: 'completed', content };
           }
         }
+        void reading;
       }
 
       // Stream ended without an explicit done flag — treat whatever arrived
