@@ -472,7 +472,7 @@ cp frontend/.env.example frontend/.env
 | `OLLAMA_BASE_URL` | Ollama API endpoint |
 | `OLLAMA_DEFAULT_MODEL` | Default model name |
 | `DATABASE_PATH` | SQLite file location |
-| `SESSION_SECRET` | JWT signing key |
+| `SESSION_COOKIE_NAME` | Session cookie name (no signing secret needed) |
 | `FRONTEND_URL` | CORS origin |
 
 ## Git Workflow
