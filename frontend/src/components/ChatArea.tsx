@@ -502,14 +502,38 @@ export function ChatArea() {
 
   /* -------------------------------- render -------------------------------- */
 
-  const showWelcome = !routeConversationId || (!isLoadingConversation && messages.length === 0 && !isGenerating);
   const placeholder = ollamaHealthy
     ? 'Message Auron AI…'
     : 'Start Ollama to chat (`ollama serve`)…';
 
-  if (!routeConversationId && showWelcome) {
+  const header = (
+    <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line-subtle bg-surface-primary/60 px-4 backdrop-blur-md">
+      <button
+        type="button"
+        onClick={() => setMobileSidebarOpen(true)}
+        className="icon-btn lg:hidden"
+        aria-label="Open sidebar"
+      >
+        <Menu size={20} />
+      </button>
+      <h1 className="min-w-0 flex-1 truncate text-sm font-semibold text-content-primary">
+        {activeConversation?.title || 'New chat'}
+      </h1>
+      {effectiveModel && (
+        <Tooltip content={modelsLoaded && models.length > 0 ? 'Selected model' : 'Model'}>
+          <span className="hidden items-center gap-1.5 rounded-full border border-line-subtle bg-surface-secondary px-2.5 py-1 text-xs font-medium text-content-secondary sm:inline-flex">
+            <Cpu size={12} className="text-accent" />
+            {effectiveModel}
+          </span>
+        </Tooltip>
+      )}
+    </header>
+  );
+
+  if (!routeConversationId) {
     return (
       <div className="flex h-full flex-col overflow-hidden">
+        {header}
         <Welcome onSelectPrompt={handleSend} />
         <MessageComposer onSend={handleSend} onStop={handleStop} isGenerating={false} placeholder={placeholder} />
       </div>
@@ -518,28 +542,7 @@ export function ChatArea() {
 
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
-      {/* Header */}
-      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line-subtle bg-surface-primary/60 px-4 backdrop-blur-md">
-        <button
-          type="button"
-          onClick={() => setMobileSidebarOpen(true)}
-          className="icon-btn lg:hidden"
-          aria-label="Open sidebar"
-        >
-          <Menu size={20} />
-        </button>
-        <h1 className="min-w-0 flex-1 truncate text-sm font-semibold text-content-primary">
-          {activeConversation?.title || 'New chat'}
-        </h1>
-        {effectiveModel && (
-          <Tooltip content={modelsLoaded && models.length > 0 ? 'Selected model' : 'Model'}>
-            <span className="hidden items-center gap-1.5 rounded-full border border-line-subtle bg-surface-secondary px-2.5 py-1 text-xs font-medium text-content-secondary sm:inline-flex">
-              <Cpu size={12} className="text-accent" />
-              {effectiveModel}
-            </span>
-          </Tooltip>
-        )}
-      </header>
+      {header}
 
       {/* Banners */}
       {(!ollamaHealthy || modelNotice || banner) && (
