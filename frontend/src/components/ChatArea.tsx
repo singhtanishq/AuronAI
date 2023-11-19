@@ -222,26 +222,31 @@ export function ChatArea() {
           useChatStore.getState().attachAssistantMessage(targetId, event.assistantMessageId);
           if (!viewing) break;
 
-          if (tempUserMessageIdRef.current) {
-            removeMessage(tempUserMessageIdRef.current);
+          // Capture the local message content BEFORE removing it: the real
+          // record replaces the optimistic one and must keep the prompt text.
+          const messagesNow = useConversationStore.getState().messages;
+          const tempId = tempUserMessageIdRef.current;
+          const temp = tempId ? messagesNow.find((m) => m.id === tempId) : undefined;
+          const promptContent = temp?.content ?? pendingUserContentRef.current ?? '';
+          if (tempId) {
+            removeMessage(tempId);
             tempUserMessageIdRef.current = null;
           }
-          const messagesNow = useConversationStore.getState().messages;
-          const hasUser = messagesNow.some((m) => m.id === event.userMessageId);
+          pendingUserContentRef.current = null;
+
+          const refreshed = useConversationStore.getState().messages;
+          const hasUser = refreshed.some((m) => m.id === event.userMessageId);
           if (!hasUser) {
-            // The temp message was replaced by the load flow; restore the
-            // real record so history stays consistent.
-            const temp = messagesNow.find((m) => m.id === tempUserMessageIdRef.current);
             addMessage(
               newLocalMessage({
                 id: event.userMessageId,
                 conversationId: targetId,
                 role: 'user',
-                content: temp?.content ?? '',
+                content: promptContent,
               })
             );
           }
-          const hasAssistant = messagesNow.some((m) => m.id === event.assistantMessageId);
+          const hasAssistant = refreshed.some((m) => m.id === event.assistantMessageId);
           if (!hasAssistant) {
             addMessage(
               newLocalMessage({
