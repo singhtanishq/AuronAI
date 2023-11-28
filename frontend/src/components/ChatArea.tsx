@@ -212,6 +212,7 @@ export function ChatArea() {
       }
       streamRef.current = { targetId: null, messageId: null, content: '', buffer: '', raf: null };
       tempUserMessageIdRef.current = null;
+      pendingUserContentRef.current = null;
     },
     [updateMessage]
   );
