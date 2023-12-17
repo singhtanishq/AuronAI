@@ -597,9 +597,11 @@ export function Sidebar() {
                   }
                   items={accountMenuItems(handleThemeCycle, theme, () => navigate('/profile'), () => navigate('/settings'), logout)}
                 />
-                <Tooltip content="Collapse sidebar">
-                  <Button variant="ghost" iconOnly icon={<PanelLeftClose size={17} />} onClick={toggleSidebar} aria-label="Collapse sidebar" />
-                </Tooltip>
+                <span className="hidden lg:block">
+                  <Tooltip content="Collapse sidebar">
+                    <Button variant="ghost" iconOnly icon={<PanelLeftClose size={17} />} onClick={toggleSidebar} aria-label="Collapse sidebar" />
+                  </Tooltip>
+                </span>
               </div>
             </>
           )}
