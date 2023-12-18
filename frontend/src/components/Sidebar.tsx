@@ -304,6 +304,14 @@ export function Sidebar() {
     setMobileSidebarOpen(false);
   }, [navigate, setMobileSidebarOpen]);
 
+  const goTo = useCallback(
+    (path: string) => {
+      navigate(path);
+      setMobileSidebarOpen(false);
+    },
+    [navigate, setMobileSidebarOpen]
+  );
+
   const handleSelect = useCallback(
     (id: string) => {
       navigate(`/chat/${id}`);
