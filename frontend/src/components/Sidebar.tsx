@@ -585,7 +585,7 @@ export function Sidebar() {
                     <Avatar name={user?.name || 'User'} size="sm" color={user?.avatarColor} />
                   </button>
                 }
-                items={accountMenuItems(handleThemeCycle, theme, () => navigate('/profile'), () => navigate('/settings'), logout)}
+                items={accountMenuItems(handleThemeCycle, theme, () => goTo('/profile'), () => goTo('/settings'), logout)}
               />
             </div>
           ) : (
@@ -603,7 +603,7 @@ export function Sidebar() {
                       </span>
                     </button>
                   }
-                  items={accountMenuItems(handleThemeCycle, theme, () => navigate('/profile'), () => navigate('/settings'), logout)}
+                  items={accountMenuItems(handleThemeCycle, theme, () => goTo('/profile'), () => goTo('/settings'), logout)}
                 />
                 <span className="hidden lg:block">
                   <Tooltip content="Collapse sidebar">
