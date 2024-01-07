@@ -10,8 +10,10 @@ import {
   Trash2,
   LogOut,
   ShieldCheck,
+  Menu,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useUIStore } from '../stores';
 import { useToast } from '../components/ui/Toast';
 import { Avatar, Button, Input, ConfirmDialog } from '../components/ui';
 import { api } from '../services/api';
@@ -29,10 +31,19 @@ const TABS: Array<{ id: TabId; label: string }> = [
 
 export function ProfilePage() {
   const [activeTab, setActiveTab] = useState<TabId>('profile');
+  const setMobileSidebarOpen = useUIStore((s) => s.setMobileSidebarOpen);
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <header className="shrink-0 border-b border-line-subtle px-6 py-4">
+      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line-subtle px-4 sm:px-6">
+        <button
+          type="button"
+          onClick={() => setMobileSidebarOpen(true)}
+          className="icon-btn lg:hidden"
+          aria-label="Open sidebar"
+        >
+          <Menu size={20} />
+        </button>
         <h1 className="text-xl font-bold tracking-tight text-content-primary">Profile</h1>
       </header>
 
