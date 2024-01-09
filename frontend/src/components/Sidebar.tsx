@@ -546,7 +546,7 @@ export function Sidebar() {
         {/* Conversation list */}
         <nav className="flex-1 overflow-y-auto overflow-x-hidden p-2" aria-label="Conversation list">
           {collapsed ? (
-            <div className="space-y-1">
+            <div className="flex flex-col items-center gap-1">
               {conversations.filter((c) => !c.archived).slice(0, 8).map((conversation) => (
                 <ConversationRow
                   key={conversation.id}
