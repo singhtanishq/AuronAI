@@ -143,7 +143,11 @@ export function ChatArea() {
       })
       .catch((error) => {
         if (cancelled || loadSeqRef.current !== seq) return;
-        if (error instanceof Error && 'statusCode' in error && (error as { statusCode: number }).statusCode === 404) {
+        // 404 = unknown id; 400 = malformed id. Both mean the conversation
+        // cannot exist for this account, so return to the empty chat state
+        // instead of showing a misleading connection error.
+        const status = error instanceof Error && 'statusCode' in error ? (error as { statusCode: number }).statusCode : undefined;
+        if (status === 404 || status === 400) {
           navigate('/chat', { replace: true });
           return;
         }
@@ -196,6 +200,12 @@ export function ChatArea() {
       if (stream.raf !== null) {
         cancelAnimationFrame(stream.raf);
         stream.raf = null;
+      }
+      // Merge deltas that arrived after the last animation frame; cancelling
+      // the pending frame alone would silently drop that text from the UI.
+      if (stream.buffer) {
+        stream.content += stream.buffer;
+        stream.buffer = '';
       }
       if (stream.messageId) {
         const viewing = useConversationStore.getState().activeConversationId === stream.targetId;
