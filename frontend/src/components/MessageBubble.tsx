@@ -70,7 +70,7 @@ export const MessageBubble = memo(function MessageBubble({
           </div>
         ) : (
           <div
-            className="w-full min-w-0 cursor-default"
+            className="markdown-body w-full min-w-0 cursor-default"
             onClick={handleContentClick}
             // Sanitized by renderMarkdown (DOMPurify) before reaching the DOM.
             dangerouslySetInnerHTML={{ __html: html || '' }}
