@@ -245,11 +245,6 @@ export function Sidebar() {
     if (isAuthenticated) void refreshList();
   }, [isAuthenticated, refreshList]);
 
-  // Keep the sidebar in sync when a title changes anywhere in the app.
-  useEffect(() => {
-    if (isAuthenticated) void refreshList();
-  }, [isAuthenticated, refreshList]);
-
   /* --------------------------------- search --------------------------------- */
 
   const runSearch = useCallback(async (query: string) => {
