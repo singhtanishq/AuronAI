@@ -15,6 +15,14 @@ export function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    // Client-side checks so empty submissions get friendly feedback instead
+    // of the server's validation error.
+    if (!email.trim() || !password) {
+      setError('Please enter your email and password.');
+      return;
+    }
+
     setIsLoading(true);
     try {
       await login(email, password);
