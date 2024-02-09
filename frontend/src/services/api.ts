@@ -39,8 +39,11 @@ export function setUnauthorizedHandler(handler: (() => void) | null): void {
   onUnauthorized = handler;
 }
 
-async function handleResponse<T>(response: Response): Promise<T> {
-  if (response.status === 401 && onUnauthorized) {
+/** Endpoints where a 401 means "wrong credentials", not "session expired". */
+const CREDENTIAL_ENDPOINTS = ['/auth/login', '/auth/signup', '/auth/change-password', '/auth/account'];
+
+async function handleResponse<T>(response: Response, endpoint: string): Promise<T> {
+  if (response.status === 401 && onUnauthorized && !CREDENTIAL_ENDPOINTS.some((e) => endpoint.endsWith(e))) {
     onUnauthorized();
   }
 
@@ -80,7 +83,7 @@ async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise
     ...options,
     credentials: 'include',
   });
-  return handleResponse<T>(response);
+  return handleResponse<T>(response, endpoint);
 }
 
 function jsonInit(method: string, body: unknown): RequestInit {
