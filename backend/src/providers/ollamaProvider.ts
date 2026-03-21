@@ -180,7 +180,7 @@ export class OllamaProvider extends BaseAIProvider {
       if (this.isAborted()) {
         onChunk({ type: 'error', error: 'Generation aborted', conversationId, messageId });
       } else {
-        logger.error('Ollama stream error', error);
+        logger.error('Ollama stream error', error as Record<string, unknown>);
         onChunk({ type: 'error', error: error instanceof Error ? error.message : 'Stream error', conversationId, messageId });
       }
     } finally {
