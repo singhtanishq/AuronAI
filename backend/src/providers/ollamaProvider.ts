@@ -216,7 +216,7 @@ export class OllamaProvider extends BaseAIProvider {
         } : undefined,
       }));
     } catch (error) {
-      logger.error('Failed to list Ollama models', error);
+      logger.error('Failed to list Ollama models', error as Record<string, unknown>);
       return [];
     }
   }
