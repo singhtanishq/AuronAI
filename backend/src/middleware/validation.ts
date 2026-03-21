@@ -5,7 +5,7 @@ import { logger } from '../utils/logger';
 export function validateBody<T>(schema: ZodSchema<T>) {
   return (req: Request, res: Response, next: NextFunction): void => {
     try {
-      req.body = schema.parse(req.body);
+      req.body = schema.parse(req.body) as T;
       next();
     } catch (error) {
       if (error instanceof ZodError) {
@@ -29,7 +29,8 @@ export function validateBody<T>(schema: ZodSchema<T>) {
 export function validateQuery<T>(schema: ZodSchema<T>) {
   return (req: Request, res: Response, next: NextFunction): void => {
     try {
-      req.query = schema.parse(req.query);
+      const parsed = schema.parse(req.query) as T;
+      req.query = parsed as any;
       next();
     } catch (error) {
       if (error instanceof ZodError) {
@@ -52,7 +53,8 @@ export function validateQuery<T>(schema: ZodSchema<T>) {
 export function validateParams<T>(schema: ZodSchema<T>) {
   return (req: Request, res: Response, next: NextFunction): void => {
     try {
-      req.params = schema.parse(req.params);
+      const parsed = schema.parse(req.params) as T;
+      req.params = parsed as any;
       next();
     } catch (error) {
       if (error instanceof ZodError) {
