@@ -20,7 +20,7 @@ export function validateBody<T>(schema: ZodSchema<T>) {
         });
         return;
       }
-      logger.error('Validation error', error);
+      logger.error('Validation error', error as Record<string, unknown>);
       res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Invalid request body' });
     }
   };
