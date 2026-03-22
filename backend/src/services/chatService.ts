@@ -113,7 +113,7 @@ export const chatService = {
         content: fullContent,
       };
     } catch (error) {
-      logger.error('Chat service error', error);
+      logger.error('Chat service error', error as Record<string, unknown>);
       await messageRepository.updateStatus(assistantMessage.id, 'error');
       throw error;
     }
