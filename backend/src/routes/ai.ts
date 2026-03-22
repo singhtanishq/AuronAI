@@ -110,7 +110,7 @@ router.post('/regenerate', authMiddleware, validateBody(regenerateSchema), async
 
     sendChunk({ type: 'complete', content: result.content });
   } catch (error) {
-    logger.error('Regenerate error', error);
+    logger.error('Regenerate error', error as Record<string, unknown>);
     sendError(error instanceof Error ? error.message : 'Regeneration failed');
   } finally {
     res.end();
