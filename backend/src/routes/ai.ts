@@ -70,7 +70,7 @@ router.post('/chat', authMiddleware, validateBody(chatSchema), asyncHandler(asyn
       assistantMessageId: result.assistantMessageId,
     });
   } catch (error) {
-    logger.error('Chat error', error);
+    logger.error('Chat error', error as Record<string, unknown>);
     sendError(error instanceof Error ? error.message : 'Chat failed');
   } finally {
     res.end();
