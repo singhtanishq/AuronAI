@@ -1,11 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import hljs from 'highlight.js';
-import { Copy, RotateCcw, ThumbsUp, ThumbsDown, MoreHorizontal, Check } from 'lucide-react';
-import { clsx } from 'clsx';
-import { Avatar, Button, TooltipTrigger, Dropdown, ToastProvider, useToast } from '../ui';
-import type { Message } from '../types';
+import { Copy, RotateCcw, MoreHorizontal, Check } from 'lucide-react';
+import MessageBubble from './MessageBubble';
+import { Avatar, Button, Dropdown, TooltipTrigger } from '@/components/ui';
+import type { Message } from '@/types';
 import { formatDistanceToNow } from 'date-fns';
 import 'highlight.js/styles/github-dark.min.css';
 
@@ -16,7 +16,7 @@ marked.setOptions({
 
 const renderer = new marked.Renderer();
 
-renderer.code = ({ text, lang }) => {
+renderer.code = ({ text, lang }: { text: string; lang?: string }) => {
   const highlighted = lang && hljs.getLanguage(lang)
     ? hljs.highlight(text, { language: lang }).value
     : hljs.highlightAuto(text).value;
@@ -32,23 +32,24 @@ renderer.code = ({ text, lang }) => {
   </div>`;
 };
 
-renderer.blockquote = ({ text }) => {
+renderer.blockquote = ({ text }: { text: string }) => {
   return `<blockquote class="border-l-4 border-primary-500 pl-4 italic text-text-secondary my-2 dark:border-primary-400">${text}</blockquote>`;
 };
 
-function MessageBubble({ message, onCopy, onRegenerate, onRetry, showActions = true, isStreaming = false }: {
+interface MessageBubbleProps {
   message: Message;
   onCopy: () => void;
   onRegenerate: () => void;
   onRetry?: () => void;
   showActions?: boolean;
   isStreaming?: boolean;
-}) {
+}
+
+export function MessageBubble({ message, onCopy, onRegenerate, onRetry, showActions = true, isStreaming = false }: MessageBubbleProps) {
   const [copied, setCopied] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const messageRef = useRef<HTMLDivElement>(null);
-  const { addToast } = useToast();
 
   useEffect(() => {
     if (messageRef.current) {
@@ -71,7 +72,6 @@ function MessageBubble({ message, onCopy, onRegenerate, onRetry, showActions = t
   const handleCopy = () => {
     navigator.clipboard.writeText(message.content);
     setCopied(true);
-    addToast('Copied to clipboard', 'success');
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -86,10 +86,7 @@ function MessageBubble({ message, onCopy, onRegenerate, onRetry, showActions = t
   return (
     <div
       ref={messageRef}
-      className={clsx(
-        'flex gap-3 animate-message-enter',
-        message.role === 'user' ? 'flex-row-reverse' : ''
-      )}
+      className={`flex gap-3 animate-message-enter ${message.role === 'user' ? 'flex-row-reverse' : ''}`}
       data-message-id={message.id}
     >
       <Avatar
@@ -97,14 +94,11 @@ function MessageBubble({ message, onCopy, onRegenerate, onRetry, showActions = t
         size="sm"
         className="mt-1 shrink-0"
       />
-      <div className={clsx('flex-1 min-w-0', message.role === 'user' && 'text-right')}>
+      <div className={`flex-1 min-w-0 ${message.role === 'user' ? 'text-right' : ''}`}>
         <div
-          className={clsx(
-            'inline-block max-w-[85%] px-4 py-2.5 rounded-2xl',
-            message.role === 'user'
-              ? 'bg-primary-600 text-white rounded-tr-sm'
-              : 'bg-surface-100 dark:bg-surface-800 text-text-primary rounded-tl-sm'
-          )}
+          className={`inline-block max-w-[85%] px-4 py-2.5 rounded-2xl ${message.role === 'user'
+            ? 'bg-primary-600 text-white rounded-tr-sm'
+            : 'bg-surface-100 dark:bg-surface-800 text-text-primary rounded-tl-sm'}`}
         >
           {message.role === 'assistant' ? (
             <div
@@ -129,7 +123,7 @@ function MessageBubble({ message, onCopy, onRegenerate, onRetry, showActions = t
           )}
         </div>
 
-        <div className={clsx('flex items-center gap-1 mt-1.5', message.role === 'user' ? 'justify-end' : 'justify-start')}>
+        <div className={`flex items-center gap-1 mt-1.5 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
           {showActions && message.role === 'assistant' && message.status === 'completed' && (
             <TooltipTrigger content="Copy" delay={0}>
               <Button
@@ -182,5 +176,3 @@ function MessageBubble({ message, onCopy, onRegenerate, onRetry, showActions = t
     </div>
   );
 }
-
-export default MessageBubble;
