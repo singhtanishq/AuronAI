@@ -15,7 +15,7 @@ router.get('/', asyncHandler(async (req, res) => {
     db.prepare('SELECT 1').get();
     dbHealthy = true;
   } catch (error) {
-    logger.error('Database health check failed', error);
+    logger.error('Database health check failed', error as Record<string, unknown>);
   }
 
   const provider = getAIProvider();
