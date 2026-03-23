@@ -1,13 +1,13 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { Loader2, RotateCcw, AlertCircle, WifiOff, Cpu } from 'lucide-react';
-import { Skeleton, SkeletonMessage } from '../ui';
+import { Skeleton, SkeletonMessage } from './ui';
 import MessageBubble from './MessageBubble';
 import { Welcome } from './Welcome';
 import { MessageComposer } from './MessageComposer';
-import { useConversationStore, useChatStore, useSettingsStore } from '../../stores';
-import { useAuth } from '../../contexts/AuthContext';
-import { api } from '../../services/api';
-import type { Message } from '../../types';
+import { useConversationStore, useChatStore, useSettingsStore } from '../stores';
+import { useAuth } from '../contexts/AuthContext';
+import { api } from '../services/api';
+import type { Message } from '../types';
 
 export function ChatArea() {
   const { isAuthenticated } = useAuth();
