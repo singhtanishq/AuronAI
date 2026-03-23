@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { Send, Paperclip, X, Smile } from 'lucide-react';
-import { Button, Textarea } from '../ui';
-import { useChatStore } from '../../stores';
+import { Button, Textarea } from './ui';
+import { useChatStore } from '../stores';
 
 interface MessageComposerProps {
   onSend: (message: string) => void;
