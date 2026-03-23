@@ -1,9 +1,7 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { clsx } from 'clsx';
-import { Send, Mic, Paperclip, X, Smile } from 'lucide-react';
-import { Button, Textarea } from '../ui';
-import { useChatStore } from '../../stores';
-import { useTheme } from '../../contexts/ThemeContext';
+import { useRef, useEffect, useState, useCallback } from 'react';
+import { Send, Paperclip, X, Smile } from 'lucide-react';
+import { Button, Textarea } from '@/components/ui';
+import { useChatStore } from '@/stores';
 
 interface MessageComposerProps {
   onSend: (message: string) => void;
@@ -13,7 +11,6 @@ interface MessageComposerProps {
 }
 
 export function MessageComposer({ onSend, onStop, disabled = false, placeholder = 'Message Auron AI...' }: MessageComposerProps) {
-  const { resolvedTheme } = useTheme();
   const { isGenerating, abortGeneration } = useChatStore();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [value, setValue] = useState('');
@@ -64,7 +61,6 @@ export function MessageComposer({ onSend, onStop, disabled = false, placeholder 
     else abortGeneration();
   };
 
-  // Show stop button when generating
   useEffect(() => {
     setShowStop(isGenerating);
   }, [isGenerating]);
