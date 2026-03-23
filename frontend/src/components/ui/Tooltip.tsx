@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect, createContext, useContext } from 'react';
+import { useState, useRef, useEffect, createContext, useContext } from 'react';
 import { createPortal } from 'react-dom';
-import { clsx } from 'clsx';
+import { cloneElement } from 'react';
 
 interface TooltipContextType {
   registerTooltip: (id: string, element: HTMLElement | null) => void;
@@ -125,11 +125,10 @@ export function TooltipTrigger({ children, content, delay = 200 }: TooltipTrigge
   const timeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
   const child = React.Children.only(children);
-  const childRef = (child as React.ReactElement).ref;
 
   const mergedRef = (node: HTMLElement | null) => {
-    if (typeof childRef === 'function') childRef(node);
-    else if (childRef && 'current' in childRef) (childRef as React.MutableRefObject<HTMLElement | null>).current = node;
+    if (typeof child.ref === 'function') child.ref(node);
+    else if (child.ref && 'current' in child.ref) (child.ref as React.MutableRefObject<HTMLElement | null>).current = node;
     registerTooltip(tooltipId.current, node);
     return () => unregisterTooltip(tooltipId.current);
   };
@@ -143,7 +142,7 @@ export function TooltipTrigger({ children, content, delay = 200 }: TooltipTrigge
     hideTooltip(tooltipId.current);
   };
 
-  return React.cloneElement(child, {
+  return cloneElement(child, {
     ref: mergedRef,
     onMouseEnter: handleMouseEnter,
     onMouseLeave: handleMouseLeave,
