@@ -3,9 +3,8 @@ import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import hljs from 'highlight.js';
 import { Copy, RotateCcw, MoreHorizontal, Check } from 'lucide-react';
-import MessageBubble from './MessageBubble';
-import { Avatar, Button, Dropdown, TooltipTrigger } from '@/components/ui';
-import type { Message } from '@/types';
+import { Avatar, Button, Dropdown, TooltipTrigger } from '../ui';
+import type { Message } from '../../types';
 import { formatDistanceToNow } from 'date-fns';
 import 'highlight.js/styles/github-dark.min.css';
 
