@@ -15,24 +15,25 @@ marked.setOptions({
 
 const renderer = new marked.Renderer();
 
-renderer.code = ({ text, lang }: { text: string; lang?: string }) => {
+renderer.code = (code: string, infostring: string | undefined, _escaped: boolean) => {
+  const lang = infostring?.split(' ')[0];
   const highlighted = lang && hljs.getLanguage(lang)
-    ? hljs.highlight(text, { language: lang }).value
-    : hljs.highlightAuto(text).value;
+    ? hljs.highlight(code, { language: lang }).value
+    : hljs.highlightAuto(code).value;
 
   return `<div class="code-block relative group">
     <div class="code-block-header flex items-center justify-between">
       <span class="text-xs text-text-muted">${lang || 'plaintext'}</span>
-      <button class="code-block-copy btn-ghost p-1.5 text-xs opacity-0 group-hover:opacity-100 transition-opacity" data-code="${encodeURIComponent(text)}" aria-label="Copy code">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+      <button class="code-block-copy btn-ghost p-1.5 text-xs opacity-0 group-hover:opacity-100 transition-opacity" data-code="${encodeURIComponent(code)}" aria-label="Copy code">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 002 2z" /></svg>
       </button>
     </div>
     <pre class="overflow-x-auto rounded-b-lg p-4"><code class="hljs language-${lang || ''}">${highlighted}</code></pre>
   </div>`;
 };
 
-renderer.blockquote = ({ text }: { text: string }) => {
-  return `<blockquote class="border-l-4 border-primary-500 pl-4 italic text-text-secondary my-2 dark:border-primary-400">${text}</blockquote>`;
+renderer.blockquote = (quote: string) => {
+  return `<blockquote class="border-l-4 border-primary-500 pl-4 italic text-text-secondary my-2 dark:border-primary-400">${quote}</blockquote>`;
 };
 
 interface MessageBubbleProps {
