@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
-import { Loader2, RotateCcw, AlertCircle, WifiOff, Cpu } from 'lucide-react';
+import { Loader2, RotateCcw, AlertCircle, WifiOff, Cpu, X } from 'lucide-react';
 import { Skeleton, SkeletonMessage } from './ui';
-import MessageBubble from './MessageBubble';
+import { MessageBubble } from './MessageBubble';
 import { Welcome } from './Welcome';
 import { MessageComposer } from './MessageComposer';
 import { useConversationStore, useChatStore, useSettingsStore } from '../stores';
