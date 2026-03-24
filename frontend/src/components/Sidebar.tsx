@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Link, useLocation, NavLink } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { clsx } from 'clsx';
 import {
   Menu,
@@ -22,12 +22,12 @@ import {
   Archive,
   ArchiveRestore,
 } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
-import { useUIStore, useConversationStore, useSettingsStore } from '../../stores';
-import { api } from '../../services/api';
-import { Avatar, Button, Modal, Dropdown, TooltipTrigger } from '../ui';
+import { useAuth } from '../contexts/AuthContext';
+import { useUIStore, useConversationStore, useSettingsStore } from '../stores';
+import { api } from '../services/api';
+import { Avatar, Button, Modal, Dropdown, TooltipTrigger } from './ui';
 import { formatDistanceToNow } from 'date-fns';
-import { useToast } from '../ui/Toast';
+import { useToast } from './ui/Toast';
 
 interface ConversationItemProps {
   conversation: {
