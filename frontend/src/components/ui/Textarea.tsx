@@ -42,6 +42,15 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
       }
     }, [autoResize, minRows, maxRows, props.value]);
 
+    const handleRef = (el: HTMLTextAreaElement | null) => {
+      textareaRef.current = el;
+      if (typeof ref === 'function') {
+        ref(el);
+      } else if (ref && typeof ref === 'object' && 'current' in ref) {
+        (ref as React.MutableRefObject<HTMLTextAreaElement | null>).current = el;
+      }
+    };
+
     return (
       <div className="w-full">
         {label && (
@@ -50,11 +59,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           </label>
         )}
         <textarea
-          ref={(el) => {
-            textareaRef.current = el;
-            if (typeof ref === 'function') ref(el);
-            else if (ref) (ref as React.MutableRefObject<HTMLTextAreaElement | null>).current = el;
-          }}
+          ref={handleRef}
           id={textareaId}
           rows={rows}
           className={clsx(
