@@ -14,6 +14,19 @@ export class ApiError extends Error {
   }
 }
 
+function getStoredToken(): string | null {
+  try {
+    const authData = localStorage.getItem('auron-auth');
+    if (authData) {
+      const parsed = JSON.parse(authData);
+      return parsed.token || null;
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return null;
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
   const contentType = response.headers.get('content-type');
   const isJson = contentType?.includes('application/json');
@@ -46,12 +59,20 @@ async function fetchApi<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
+  const token = getStoredToken();
+  
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...options.headers as Record<string, string>,
+  };
+  
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const response = await fetch(`${API_BASE}${endpoint}`, {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
+    headers,
     credentials: 'include',
   });
 
