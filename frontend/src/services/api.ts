@@ -3,331 +3,350 @@ import type { User, Conversation, ConversationWithMeta, Message, ChatRequest, St
 const API_BASE = '/api';
 
 export class ApiError extends Error {
-  constructor(
-    public code: string,
-    message: string,
-    public statusCode: number,
-    public details?: Record<string, unknown>
-  ) {
-    super(message);
-    this.name = 'ApiError';
-  }
+constructor(
+public code: string,
+message: string,
+public statusCode: number,
+public details?: Record<string, unknown>
+) {
+super(message);
+this.name = 'ApiError';
+}
 }
 
 function getStoredToken(): string | null {
-  try {
-    const authData = localStorage.getItem('auron-auth');
-    if (authData) {
-      const parsed = JSON.parse(authData);
-      return parsed.token || null;
-    }
-  } catch {
-    // Ignore parse errors
-  }
-  return null;
+try {
+const authData = localStorage.getItem('auron-auth');
+if (authData) {
+const parsed = JSON.parse(authData);
+return parsed.token || null;
+}
+} catch {
+// Ignore parse errors
+}
+return null;
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {
-  const contentType = response.headers.get('content-type');
-  const isJson = contentType?.includes('application/json');
+const contentType = response.headers.get('content-type');
+const isJson = contentType?.includes('application/json');
 
-  if (!response.ok) {
-    let errorData: ApiError | null = null;
-    if (isJson) {
-      errorData = await response.json();
-    }
-    throw new ApiError(
-      errorData?.code || 'API_ERROR',
-      errorData?.message || `Request failed with status ${response.status}`,
-      response.status,
-      errorData?.details
-    );
-  }
+if (!response.ok) {
+let errorData: ApiError | null = null;
+if (isJson) {
+errorData = await response.json();
+}
+throw new ApiError(
+errorData?.code || 'API_ERROR',
+errorData?.message || `Request failed with status ${response.status}`,
+response.status,
+errorData?.details
+);
+}
 
-  if (response.status === 204) {
-    return undefined as T;
-  }
+if (response.status === 204) {
+return undefined as T;
+}
 
-  if (isJson) {
-    return response.json();
-  }
+if (isJson) {
+return response.json();
+}
 
-  return response.text() as T;
+return response.text() as T;
 }
 
 async function fetchApi<T>(
-  endpoint: string,
-  options: RequestInit = {}
+endpoint: string,
+options: RequestInit = {}
 ): Promise<T> {
-  const token = getStoredToken();
-  
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...options.headers as Record<string, string>,
-  };
-  
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
+const token = getStoredToken();
 
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers,
-    credentials: 'include',
-  });
+const headers: Record<string, string> = {
+'Content-Type': 'application/json',
+...options.headers as Record<string, string>,
+};
 
-  return handleResponse<T>(response);
+if (token) {
+headers['Authorization'] = `Bearer ${token}`;
+}
+
+const response = await fetch(`${API_BASE}${endpoint}`, {
+...options,
+headers,
+credentials: 'include',
+});
+
+return handleResponse<T>(response);
 }
 
 export const api = {
-  // Auth
-  auth: {
-    signup: (data: { name: string; email: string; password: string; confirmPassword: string }) =>
-      fetchApi<{ user: User; token: string }>('/auth/signup', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      }),
+// Auth
+auth: {
+signup: (data: { name: string; email: string; password: string; confirmPassword: string }) =>
+fetchApi<{ user: User; token: string }>('/auth/signup', {
+method: 'POST',
+body: JSON.stringify(data),
+}),
 
-    login: (data: { email: string; password: string }) =>
-      fetchApi<{ user: User; token: string }>('/auth/login', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      }),
+```
+login: (data: { email: string; password: string }) =>
+  fetchApi<{ user: User; token: string }>('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
 
-    logout: () =>
-      fetchApi<{ message: string }>('/auth/logout', { method: 'POST' }),
+logout: () =>
+  fetchApi<{ message: string }>('/auth/logout', { method: 'POST' }),
 
-    logoutAll: () =>
-      fetchApi<{ message: string }>('/auth/logout-all', { method: 'POST' }),
+logoutAll: () =>
+  fetchApi<{ message: string }>('/auth/logout-all', { method: 'POST' }),
 
-    me: () =>
-      fetchApi<{ user: User }>('/auth/me'),
+me: () =>
+  fetchApi<{ user: User }>('/auth/me'),
 
-    changePassword: (data: { currentPassword: string; newPassword: string; confirmPassword: string }) =>
-      fetchApi<{ message: string }>('/auth/change-password', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      }),
+changePassword: (data: { currentPassword: string; newPassword: string; confirmPassword: string }) =>
+  fetchApi<{ message: string }>('/auth/change-password', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
 
-    updateProfile: (data: { name?: string; email?: string }) =>
-      fetchApi<{ user: User }>('/auth/profile', {
-        method: 'PATCH',
-        body: JSON.stringify(data),
-      }),
+updateProfile: (data: { name?: string; email?: string }) =>
+  fetchApi<{ user: User }>('/auth/profile', {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  }),
 
-    deleteAccount: (password: string) =>
-      fetchApi<{ message: string }>('/auth/account', {
-        method: 'DELETE',
-        body: JSON.stringify({ password }),
-      }),
-  },
+deleteAccount: (password: string) =>
+  fetchApi<{ message: string }>('/auth/account', {
+    method: 'DELETE',
+    body: JSON.stringify({ password }),
+  }),
+```
 
-  // Conversations
-  conversations: {
-    list: (params?: { page?: number; pageSize?: number; includeArchived?: boolean }) => {
-      const searchParams = new URLSearchParams();
-      if (params?.page) searchParams.set('page', String(params.page));
-      if (params?.pageSize) searchParams.set('pageSize', String(params.pageSize));
-      if (params?.includeArchived) searchParams.set('includeArchived', 'true');
-      const query = searchParams.toString();
-      return fetchApi<PaginatedResponse<ConversationWithMeta>>(`/conversations${query ? `?${query}` : ''}`);
-    },
+},
 
-    search: (query: string, limit = 20) =>
-      fetchApi<SearchResult>(`/conversations/search?q=${encodeURIComponent(query)}&limit=${limit}`),
+// Conversations
+conversations: {
+list: (params?: { page?: number; pageSize?: number; includeArchived?: boolean }) => {
+const searchParams = new URLSearchParams();
+if (params?.page) searchParams.set('page', String(params.page));
+if (params?.pageSize) searchParams.set('pageSize', String(params.pageSize));
+if (params?.includeArchived) searchParams.set('includeArchived', 'true');
+const query = searchParams.toString();
+return fetchApi<PaginatedResponse<ConversationWithMeta>>(`/conversations${query ? `?${query}` : ''}`);
+},
 
-    pinned: () =>
-      fetchApi<{ data: ConversationWithMeta[] }>('/conversations/pinned'),
+```
+search: (query: string, limit = 20) =>
+  fetchApi<SearchResult>(`/conversations/search?q=${encodeURIComponent(query)}&limit=${limit}`),
 
-    create: (title?: string) =>
-      fetchApi<{ conversation: Conversation }>('/conversations', {
-        method: 'POST',
-        body: JSON.stringify({ title }),
-      }),
+pinned: () =>
+  fetchApi<{ data: ConversationWithMeta[] }>('/conversations/pinned'),
 
-    get: (id: string) =>
-      fetchApi<{ conversation: Conversation; messages: Message[] }>(`/conversations/${id}`),
+create: (title?: string) =>
+  fetchApi<{ conversation: Conversation }>('/conversations', {
+    method: 'POST',
+    body: JSON.stringify({ title }),
+  }),
 
-    update: (id: string, data: { title?: string; pinned?: boolean; archived?: boolean }) =>
-      fetchApi<{ conversation: Conversation }>(`/conversations/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify(data),
-      }),
+get: (id: string) =>
+  fetchApi<{ conversation: Conversation; messages: Message[] }>(`/conversations/${id}`),
 
-    delete: (id: string) =>
-      fetchApi<{ message: string }>(`/conversations/${id}`, { method: 'DELETE' }),
+update: (id: string, data: { title?: string; pinned?: boolean; archived?: boolean }) =>
+  fetchApi<{ conversation: Conversation }>(`/conversations/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  }),
 
-    deleteAll: () =>
-      fetchApi<{ message: string; count: number }>('/conversations', {
-        method: 'DELETE',
-        body: JSON.stringify({ confirm: 'DELETE ALL' }),
-      }),
-  },
+delete: (id: string) =>
+  fetchApi<{ message: string }>(`/conversations/${id}`, { method: 'DELETE' }),
 
-  // AI/Chat
-  ai: {
-    chat: (data: ChatRequest, onChunk: (chunk: StreamChunk) => void, signal?: AbortSignal) => {
-      const token = getStoredToken();
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-      
-      return fetch(`${API_BASE}/ai/chat`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(data),
-        credentials: 'include',
-        signal,
-      }).then(async (response) => {
-        if (!response.ok) {
-          const error = await response.json();
-          throw new ApiError(error.code || 'CHAT_ERROR', error.message || 'Chat failed', response.status);
-        }
+deleteAll: () =>
+  fetchApi<{ message: string; count: number }>('/conversations', {
+    method: 'DELETE',
+    body: JSON.stringify({ confirm: 'DELETE ALL' }),
+  }),
+```
 
-        const reader = response.body?.getReader();
-        if (!reader) throw new Error('No response body');
+},
 
-        const decoder = new TextDecoder();
-        let buffer = '';
+// AI/Chat
+ai: {
+chat: (data: ChatRequest, onChunk: (chunk: StreamChunk) => void, signal?: AbortSignal) => {
+const token = getStoredToken();
+const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+if (token) {
+headers['Authorization'] = `Bearer ${token}`;
+}
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+```
+  return fetch(`${API_BASE}/ai/chat`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(data),
+    credentials: 'include',
+    signal,
+  }).then(async (response) => {
+    if (!response.ok) {
+      const error = await response.json();
+      throw new ApiError(error.code || 'CHAT_ERROR', error.message || 'Chat failed', response.status);
+    }
 
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('No response body');
 
-          for (const line of lines) {
-            if (!line.trim()) continue;
-            if (line.startsWith('data: ')) {
-              try {
-                const chunk = JSON.parse(line.slice(6)) as StreamChunk;
-                onChunk(chunk);
-              } catch (e) {
-                console.warn('Failed to parse SSE chunk:', line);
-              }
-            }
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        if (line.startsWith('data: ')) {
+          try {
+            const chunk = JSON.parse(line.slice(6)) as StreamChunk;
+            onChunk(chunk);
+          } catch (e) {
+            console.warn('Failed to parse SSE chunk:', line);
           }
         }
-      });
-    },
-
-    regenerate: (conversationId: string, assistantMessageId: string, onChunk: (chunk: StreamChunk) => void, signal?: AbortSignal) => {
-      const token = getStoredToken();
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
       }
-      
-      return fetch(`${API_BASE}/ai/regenerate`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ conversationId, assistantMessageId }),
-        credentials: 'include',
-        signal,
-      }).then(async (response) => {
-        if (!response.ok) {
-          const error = await response.json();
-          throw new ApiError(error.code || 'REGENERATE_ERROR', error.message || 'Regeneration failed', response.status);
-        }
+    }
+  });
+},
 
-        const reader = response.body?.getReader();
-        if (!reader) throw new Error('No response body');
+regenerate: (conversationId: string, assistantMessageId: string, onChunk: (chunk: StreamChunk) => void, signal?: AbortSignal) => {
+  const token = getStoredToken();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  
+  return fetch(`${API_BASE}/ai/regenerate`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ conversationId, assistantMessageId }),
+    credentials: 'include',
+    signal,
+  }).then(async (response) => {
+    if (!response.ok) {
+      const error = await response.json();
+      throw new ApiError(error.code || 'REGENERATE_ERROR', error.message || 'Regeneration failed', response.status);
+    }
 
-        const decoder = new TextDecoder();
-        let buffer = '';
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('No response body');
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+    const decoder = new TextDecoder();
+    let buffer = '';
 
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-          for (const line of lines) {
-            if (!line.trim()) continue;
-            if (line.startsWith('data: ')) {
-              try {
-                const chunk = JSON.parse(line.slice(6)) as StreamChunk;
-                onChunk(chunk);
-              } catch (e) {
-                console.warn('Failed to parse SSE chunk:', line);
-              }
-            }
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        if (line.startsWith('data: ')) {
+          try {
+            const chunk = JSON.parse(line.slice(6)) as StreamChunk;
+            onChunk(chunk);
+          } catch (e) {
+            console.warn('Failed to parse SSE chunk:', line);
           }
         }
-      });
-    },
+      }
+    }
+  });
+},
 
-    abort: (conversationId: string, assistantMessageId: string) =>
-      fetchApi<{ message: string }>('/ai/abort', {
-        method: 'POST',
-        body: JSON.stringify({ conversationId, assistantMessageId }),
-      }),
+abort: (conversationId: string, assistantMessageId: string) =>
+  fetchApi<{ message: string }>('/ai/abort', {
+    method: 'POST',
+    body: JSON.stringify({ conversationId, assistantMessageId }),
+  }),
 
-    models: () =>
-      fetchApi<{ models: ModelInfo[] }>('/ai/models'),
+models: () =>
+  fetchApi<{ models: ModelInfo[] }>('/ai/models', {
+    cache: 'no-store',
+  }),
 
-    health: () =>
-      fetchApi<{ reachable: boolean; models: number; defaultModel?: string; error?: string }>('/ai/health'),
-  },
+health: () =>
+  fetchApi<{ reachable: boolean; models: number; defaultModel?: string; error?: string }>('/ai/health', {
+    cache: 'no-store',
+  }),
+```
 
-  // Settings
-  settings: {
-    get: () =>
-      fetchApi<{ preferences: UserPreferences }>('/settings'),
+},
 
-    update: (data: Partial<UserPreferences>) =>
-      fetchApi<{ preferences: UserPreferences }>('/settings', {
-        method: 'PATCH',
-        body: JSON.stringify(data),
-      }),
+// Settings
+settings: {
+get: () =>
+fetchApi<{ preferences: UserPreferences }>('/settings'),
 
-    setTheme: (theme: 'light' | 'dark' | 'system') =>
-      fetchApi<{ preferences: UserPreferences }>('/settings/theme', {
-        method: 'PATCH',
-        body: JSON.stringify({ theme }),
-      }),
+```
+update: (data: Partial<UserPreferences>) =>
+  fetchApi<{ preferences: UserPreferences }>('/settings', {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  }),
 
-    setSidebarCollapsed: (collapsed: boolean) =>
-      fetchApi<{ preferences: UserPreferences }>('/settings/sidebar', {
-        method: 'PATCH',
-        body: JSON.stringify({ collapsed }),
-      }),
+setTheme: (theme: 'light' | 'dark' | 'system') =>
+  fetchApi<{ preferences: UserPreferences }>('/settings/theme', {
+    method: 'PATCH',
+    body: JSON.stringify({ theme }),
+  }),
 
-    setModel: (model: string) =>
-      fetchApi<{ preferences: UserPreferences }>('/settings/model', {
-        method: 'PATCH',
-        body: JSON.stringify({ model }),
-      }),
+setSidebarCollapsed: (collapsed: boolean) =>
+  fetchApi<{ preferences: UserPreferences }>('/settings/sidebar', {
+    method: 'PATCH',
+    body: JSON.stringify({ collapsed }),
+  }),
 
-    setTemperature: (temperature: number) =>
-      fetchApi<{ preferences: UserPreferences }>('/settings/temperature', {
-        method: 'PATCH',
-        body: JSON.stringify({ temperature }),
-      }),
+setModel: (model: string) =>
+  fetchApi<{ preferences: UserPreferences }>('/settings/model', {
+    method: 'PATCH',
+    body: JSON.stringify({ model }),
+  }),
 
-    setSystemPrompt: (systemPrompt: string) =>
-      fetchApi<{ preferences: UserPreferences }>('/settings/system-prompt', {
-        method: 'PATCH',
-        body: JSON.stringify({ systemPrompt }),
-      }),
-  },
+setTemperature: (temperature: number) =>
+  fetchApi<{ preferences: UserPreferences }>('/settings/temperature', {
+    method: 'PATCH',
+    body: JSON.stringify({ temperature }),
+  }),
 
-  // Health
-  health: {
-    check: () =>
-      fetchApi<HealthStatus>('/health'),
+setSystemPrompt: (systemPrompt: string) =>
+  fetchApi<{ preferences: UserPreferences }>('/settings/system-prompt', {
+    method: 'PATCH',
+    body: JSON.stringify({ systemPrompt }),
+  }),
+```
 
-    aiHealth: () =>
-      fetchApi<{ reachable: boolean; models: number; defaultModel?: string; error?: string }>('/health/ai'),
+},
 
-    models: () =>
-      fetchApi<{ models: ModelInfo[] }>('/health/models'),
-  },
+// Health
+health: {
+check: () =>
+fetchApi<HealthStatus>('/health'),
+
+```
+aiHealth: () =>
+  fetchApi<{ reachable: boolean; models: number; defaultModel?: string; error?: string }>('/health/ai'),
+
+models: () =>
+  fetchApi<{ models: ModelInfo[] }>('/health/models'),
+```
+
+},
 };
 
 // Re-export types for convenience
