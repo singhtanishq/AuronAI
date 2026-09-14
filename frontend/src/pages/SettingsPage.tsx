@@ -7,7 +7,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useToast } from '../components/ui/Toast';
 import { Button, Input, Modal } from '../components/ui';
 import { api } from '../services/api';
-import type { UserPreferences } from '../types';
+import type { UserPreferences, User } from '../types';
 
 export function SettingsPage() {
   const { preferences, setPreferences, models, ollamaHealthy, isLoading, setLoading } = useSettingsStore();
