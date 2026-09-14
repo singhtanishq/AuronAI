@@ -26,7 +26,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
     forwardedRef
   ) => {
     const textareaId = id || label?.toLowerCase().replace(/\s+/g, '-');
-    const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const [rows, setRows] = useState(minRows);
 
     useEffect(() => {
