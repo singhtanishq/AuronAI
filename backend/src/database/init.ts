@@ -6,6 +6,6 @@ try {
   logger.info('Database initialization completed successfully', {});
   process.exit(0);
 } catch (error) {
-  logger.error('Database initialization failed', error);
+  logger.error('Database initialization failed', error as Record<string, unknown>);
   process.exit(1);
 }
