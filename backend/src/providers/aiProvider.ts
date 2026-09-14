@@ -16,7 +16,7 @@ export abstract class BaseAIProvider implements AIProvider {
   abstract generate(request: ChatRequest): Promise<string>;
   abstract stream(request: ChatRequest, onChunk: (chunk: StreamChunk) => void): Promise<void>;
   abstract listModels(): Promise<ModelInfo[]>;
-  abstract healthCheck(): Promise<{ reachable: boolean; models: number; error?: string }>;
+  abstract healthCheck(): Promise<{ reachable: boolean; models: number; defaultModel?: string; error?: string }>;
 
   abort(): void {
     this.aborted = true;
