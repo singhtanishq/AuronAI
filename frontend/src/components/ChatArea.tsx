@@ -93,7 +93,7 @@ export function ChatArea() {
     try {
       await api.ai.chat(
         {
-          conversationId: activeConversationId,
+          conversationId: activeConversationId || undefined,
           message: content,
           model: preferences?.model || undefined,
           temperature: preferences?.temperature,
