@@ -1,8 +1,8 @@
-import type { ApiError } from '../types';
+import type { User, Conversation, ConversationWithMeta, Message, ChatRequest, StreamChunk, ModelInfo, HealthStatus, UserPreferences, PaginatedResponse, SearchResult } from '../types';
 
 const API_BASE = '/api';
 
-class ApiError extends Error {
+export class ApiError extends Error {
   constructor(
     public code: string,
     message: string,
