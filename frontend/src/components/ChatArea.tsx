@@ -1,18 +1,16 @@
-import React, { useRef, useEffect, useCallback, useState } from 'react';
-import { clsx } from 'clsx';
+import { useRef, useEffect, useCallback, useState } from 'react';
 import { Loader2, RotateCcw, AlertCircle, WifiOff, Cpu } from 'lucide-react';
-import { Skeleton, SkeletonMessage } from '../ui';
-import { MessageBubble } from './MessageBubble';
-import { Welcome } from './Welcome';
-import { MessageComposer } from './MessageComposer';
-import { useConversationStore, useChatStore, useSettingsStore } from '../../stores';
-import { useAuth } from '../../contexts/AuthContext';
-import { api } from '../../services/api';
-import { buildSystemPrompt } from '../../utils/promptHelpers';
-import type { Message, StreamChunk } from '../../types';
+import { Skeleton, SkeletonMessage } from '@/components/ui';
+import MessageBubble from '@/components/MessageBubble';
+import { Welcome } from '@/components/Welcome';
+import { MessageComposer } from '@/components/MessageComposer';
+import { useConversationStore, useChatStore, useSettingsStore } from '@/stores';
+import { useAuth } from '@/contexts/AuthContext';
+import { api } from '@/services/api';
+import type { Message } from '@/types';
 
 export function ChatArea() {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated } = useAuth();
   const {
     activeConversation,
     activeConversationId,
@@ -25,7 +23,7 @@ export function ChatArea() {
     isLoading,
   } = useConversationStore();
   const { isGenerating, setGenerating, abortGeneration } = useChatStore();
-  const { preferences, ollamaHealthy, models } = useSettingsStore();
+  const { preferences, ollamaHealthy } = useSettingsStore();
   const [showWelcome, setShowWelcome] = useState(!activeConversationId);
   const [error, setError] = useState<string | null>(null);
   const [initialLoad, setInitialLoad] = useState(true);
@@ -34,23 +32,19 @@ export function ChatArea() {
   const userHasScrolled = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Scroll to bottom
   const scrollToBottom = useCallback((smooth = true) => {
     if (messagesEndRef.current && !userHasScrolled.current) {
       messagesEndRef.current.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' });
     }
   }, []);
 
-  // Handle scroll
   const handleScroll = useCallback(() => {
     if (messagesContainerRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
-      // User has scrolled up if not at bottom (with 100px threshold)
       userHasScrolled.current = scrollHeight - scrollTop - clientHeight > 100;
     }
   }, []);
 
-  // Load conversation
   const loadConversation = useCallback(async (conversationId: string) => {
     setLoading(true);
     setError(null);
@@ -59,7 +53,6 @@ export function ChatArea() {
       setActiveConversation(response.conversation, response.messages);
       setShowWelcome(false);
       setInitialLoad(false);
-      // Scroll to bottom after messages render
       setTimeout(() => scrollToBottom(false), 100);
     } catch (err) {
       setError('Failed to load conversation');
@@ -69,13 +62,10 @@ export function ChatArea() {
     }
   }, [setLoading, setActiveConversation, scrollToBottom]);
 
-  // Handle new message
   const handleSendMessage = useCallback(async (content: string) => {
     if (!activeConversationId && !isGenerating) {
-      // Create new conversation
       try {
         const response = await api.conversations.create();
-        // The store will be updated, we need to wait for it
         setTimeout(() => {
           useConversationStore.getState().setActiveConversationId(response.conversation.id);
         }, 0);
@@ -89,7 +79,6 @@ export function ChatArea() {
     setError(null);
     abortControllerRef.current = new AbortController();
 
-    // Add user message optimistically
     const tempUserMessage: Message = {
       id: `temp-${Date.now()}`,
       conversationId: activeConversationId || '',
@@ -112,8 +101,7 @@ export function ChatArea() {
         },
         (chunk) => {
           if (chunk.type === 'content' && chunk.content) {
-            // Update or create assistant message
-            const existingIndex = messages.findIndex(m => m.id === chunk.messageId);
+            const existingIndex = messages.findIndex((m) => m.id === chunk.messageId);
             if (existingIndex >= 0) {
               updateMessage(chunk.messageId!, { content: messages[existingIndex].content + chunk.content });
             } else {
@@ -136,7 +124,6 @@ export function ChatArea() {
             updateMessage(chunk.messageId!, { status: 'error' });
             setError(chunk.error || 'Generation failed');
           } else if (chunk.type === 'complete') {
-            // Conversation created/updated
             if (chunk.conversationId && !activeConversationId) {
               loadConversation(chunk.conversationId);
             }
@@ -167,7 +154,6 @@ export function ChatArea() {
     scrollToBottom,
   ]);
 
-  // Handle regenerate
   const handleRegenerate = useCallback(async (assistantMessageId: string) => {
     if (!activeConversationId) return;
 
@@ -181,7 +167,7 @@ export function ChatArea() {
         assistantMessageId,
         (chunk) => {
           if (chunk.type === 'content' && chunk.content) {
-            const existingIndex = messages.findIndex(m => m.id === chunk.messageId);
+            const existingIndex = messages.findIndex((m) => m.id === chunk.messageId);
             if (existingIndex >= 0) {
               updateMessage(chunk.messageId!, { content: chunk.content });
             }
@@ -207,19 +193,13 @@ export function ChatArea() {
     }
   }, [activeConversationId, messages, updateMessage, setGenerating, setError, scrollToBottom]);
 
-  // Handle retry
   const handleRetry = useCallback(async (assistantMessageId: string) => {
-    // Find the user message before this assistant message
-    const msgIndex = messages.findIndex(m => m.id === assistantMessageId);
+    const msgIndex = messages.findIndex((m) => m.id === assistantMessageId);
     const userMessage = msgIndex > 0 ? messages[msgIndex - 1] : null;
     if (!userMessage || userMessage.role !== 'user') return;
-
-    // Delete the failed assistant message and regenerate
-    // For simplicity, we'll just call regenerate
     handleRegenerate(assistantMessageId);
   }, [messages, handleRegenerate]);
 
-  // Handle stop
   const handleStop = useCallback(() => {
     abortGeneration();
     if (abortControllerRef.current) {
@@ -227,7 +207,6 @@ export function ChatArea() {
     }
   }, [abortGeneration]);
 
-  // Load conversation when activeConversationId changes
   useEffect(() => {
     if (activeConversationId) {
       loadConversation(activeConversationId);
@@ -238,19 +217,11 @@ export function ChatArea() {
     }
   }, [activeConversationId, loadConversation, setMessages]);
 
-  // Auto-scroll when new messages arrive (if user hasn't scrolled up)
   useEffect(() => {
     if (messages.length > 0 && !userHasScrolled.current) {
       scrollToBottom();
     }
   }, [messages.length, scrollToBottom]);
-
-  // Initial load - fetch conversations
-  useEffect(() => {
-    if (isAuthenticated && !initialLoad) {
-      // Conversations are loaded via the auth context
-    }
-  }, [isAuthenticated, initialLoad]);
 
   if (!isAuthenticated) {
     return (
@@ -264,9 +235,7 @@ export function ChatArea() {
   }
 
   if (showWelcome || !activeConversation) {
-    return (
-      <Welcome onSelectPrompt={handleSendMessage} />
-    );
+    return <Welcome onSelectPrompt={handleSendMessage} />;
   }
 
   if (isLoading && messages.length === 0) {
@@ -284,7 +253,6 @@ export function ChatArea() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Connection status */}
       {!ollamaHealthy && (
         <div className="px-4 py-2 bg-warning-light dark:bg-warning-dark/20 border-b border-border-light dark:border-border-dark">
           <div className="flex items-center justify-center gap-2 text-sm text-warning-dark dark:text-warning-light">
@@ -294,7 +262,6 @@ export function ChatArea() {
         </div>
       )}
 
-      {/* Messages */}
       <div
         ref={messagesContainerRef}
         className="flex-1 overflow-y-auto p-6 space-y-6"
@@ -314,7 +281,6 @@ export function ChatArea() {
           />
         ))}
 
-        {/* Streaming indicator */}
         {isGenerating && (
           <div className="flex gap-3 animate-message-enter">
             <div className="w-8 h-8 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center flex-shrink-0 mt-1">
@@ -337,7 +303,6 @@ export function ChatArea() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Error banner */}
       {error && (
         <div className="px-4 py-3 bg-error-light dark:bg-error-dark/20 border-t border-border-light dark:border-border-dark">
           <div className="flex items-center justify-between">
@@ -345,14 +310,13 @@ export function ChatArea() {
               <AlertCircle size={16} />
               <span>{error}</span>
             </div>
-            <Button variant="ghost" size="sm" onClick={() => setError(null)}>
+            <button className="p-1 text-text-muted hover:text-text-primary" onClick={() => setError(null)} aria-label="Dismiss error">
               <X size={16} />
-            </Button>
+            </button>
           </div>
         </div>
       )}
 
-      {/* Composer */}
       <MessageComposer
         onSend={handleSendMessage}
         onStop={handleStop}
