@@ -209,6 +209,7 @@ staticfiles/
 *.sqlite
 *.sqlite3
 *.db
+backend/data/
 
 # MySQL dumps
 *.sql.gz
