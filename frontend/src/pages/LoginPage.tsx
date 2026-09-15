@@ -3,13 +3,11 @@ import { Link } from 'react-router-dom';
 import { clsx } from 'clsx';
 import { Loader2, Mail, Lock, User, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { useTheme } from '../contexts/ThemeContext';
 import { Button, Input } from '../components/ui';
 import { Avatar } from '../components/ui';
 
 export function LoginPage() {
   const { login } = useAuth();
-  const { resolvedTheme } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
