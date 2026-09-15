@@ -167,9 +167,15 @@ export const api = {
   // AI/Chat
   ai: {
     chat: (data: ChatRequest, onChunk: (chunk: StreamChunk) => void, signal?: AbortSignal) => {
+      const token = getStoredToken();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
       return fetch(`${API_BASE}/ai/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(data),
         credentials: 'include',
         signal,
@@ -209,9 +215,15 @@ export const api = {
     },
 
     regenerate: (conversationId: string, assistantMessageId: string, onChunk: (chunk: StreamChunk) => void, signal?: AbortSignal) => {
+      const token = getStoredToken();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
       return fetch(`${API_BASE}/ai/regenerate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ conversationId, assistantMessageId }),
         credentials: 'include',
         signal,
