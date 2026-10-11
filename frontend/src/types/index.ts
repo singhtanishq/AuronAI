@@ -43,15 +43,18 @@ export interface ChatRequest {
   systemPrompt?: string;
 }
 
-export interface StreamChunk {
-  type: 'content' | 'done' | 'error' | 'complete';
-  content?: string;
-  messageId?: string;
-  conversationId?: string;
-  userMessageId?: string;
-  assistantMessageId?: string;
-  error?: string;
-}
+/**
+ * Server-sent events emitted by /api/ai/chat and /api/ai/regenerate.
+ * One generation produces exactly one assistant message; `delta` events
+ * append to it, `start` establishes the real record ids.
+ */
+export type StreamEvent =
+  | { type: 'start'; conversationId: string; userMessageId: string; assistantMessageId: string }
+  | { type: 'delta'; assistantMessageId: string; content: string }
+  | { type: 'title'; conversationId: string; title: string }
+  | { type: 'done'; conversationId: string; userMessageId?: string; assistantMessageId: string }
+  | { type: 'aborted'; conversationId: string; assistantMessageId: string }
+  | { type: 'error'; assistantMessageId?: string; message: string };
 
 export interface ModelInfo {
   name: string;
@@ -66,6 +69,13 @@ export interface ModelInfo {
     parameterSize?: string;
     quantizationLevel?: string;
   };
+}
+
+export interface ProviderHealth {
+  reachable: boolean;
+  models: number;
+  defaultModel?: string;
+  error?: string;
 }
 
 export interface HealthStatus {
@@ -94,6 +104,13 @@ export interface UserPreferences {
   systemPrompt: string;
 }
 
+export interface SessionInfo {
+  id: string;
+  createdAt: string;
+  expiresAt: string;
+  isCurrent: boolean;
+}
+
 export interface PaginatedResponse<T> {
   data: T[];
   total: number;
@@ -108,7 +125,7 @@ export interface SearchResult {
   query: string;
 }
 
-export interface ApiError {
+export interface ApiErrorShape {
   code: string;
   message: string;
   details?: Record<string, unknown>;
