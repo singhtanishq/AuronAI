@@ -253,6 +253,7 @@ export const chatService = {
       historyConversationId: undefined,
       excludeMessageIds: [],
       userMessageId: userMessage.id,
+      signal,
       onChunk,
       previousTitle: conversation.title,
       firstUserMessage: undefined,
@@ -271,6 +272,7 @@ export const chatService = {
     historyConversationId?: string;
     excludeMessageIds: string[];
     userMessageId: string;
+    signal?: AbortSignal;
     onChunk?: (chunk: StreamChunk) => void;
     onTitle?: (conversationId: string, title: string) => void;
     previousTitle?: string;
@@ -284,6 +286,7 @@ export const chatService = {
       historyConversationId,
       excludeMessageIds,
       userMessageId,
+      signal,
       onChunk,
       onTitle,
       previousTitle,
@@ -311,6 +314,15 @@ export const chatService = {
       assistantMessageId,
       controller,
     });
+
+    const onExternalAbort = () => controller.abort();
+    if (signal) {
+      if (signal.aborted) {
+        controller.abort();
+      } else {
+        signal.addEventListener('abort', onExternalAbort, { once: true });
+      }
+    }
 
     const startTime = Date.now();
     let fullContent = '';
