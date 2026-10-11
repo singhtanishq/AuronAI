@@ -9,6 +9,7 @@
  */
 import os from 'os';
 import path from 'path';
+import fs from 'fs';
 
 const poolId = process.env.VITEST_POOL_ID ?? process.pid.toString();
 const testDbPath = path.join(os.tmpdir(), `auron-test-${poolId}.db`);
@@ -19,7 +20,6 @@ process.env.AUTH_RATE_LIMIT_MAX = '100000';
 
 process.on('exit', () => {
   try {
-    const fs = require('fs') as typeof import('fs');
     for (const suffix of ['', '-wal', '-shm']) {
       fs.rmSync(testDbPath + suffix, { force: true });
     }
