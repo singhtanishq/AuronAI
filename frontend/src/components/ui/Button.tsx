@@ -8,6 +8,7 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   icon?: React.ReactNode;
   iconPosition?: 'left' | 'right';
   fullWidth?: boolean;
+  iconOnly?: boolean;
 }
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
@@ -20,59 +21,62 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       icon,
       iconPosition = 'left',
       fullWidth = false,
+      iconOnly = false,
       className = '',
       disabled,
+      type = 'button',
       ...props
     },
     ref
   ) => {
-    const baseClasses = 'inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
+    const base =
+      'inline-flex items-center justify-center gap-2 font-medium rounded-lg select-none ' +
+      'transition-colors duration-fast ease-out focus-visible:outline-none focus-visible:ring-2 ' +
+      'focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background-primary ' +
+      'disabled:opacity-50 disabled:pointer-events-none';
 
     const variantClasses = {
-      primary: 'bg-primary-600 text-white hover:bg-primary-700 active:bg-primary-800',
-      secondary: 'bg-surface-100 text-text-primary hover:bg-surface-200 active:bg-surface-300 dark:bg-surface-800 dark:text-text-primary dark:hover:bg-surface-700 dark:active:bg-surface-600',
-      ghost: 'bg-transparent text-text-secondary hover:bg-surface-100 active:bg-surface-200 dark:hover:bg-surface-800 dark:active:bg-surface-700',
-      danger: 'bg-error-DEFAULT text-white hover:bg-error-dark active:bg-error-dark',
+      primary:
+        'bg-accent-solid text-accent-on hover:bg-accent-hover active:brightness-90 shadow-sm',
+      secondary:
+        'bg-surface-secondary text-content-primary border border-line-subtle hover:bg-surface-hover active:brightness-95',
+      ghost:
+        'bg-transparent text-content-secondary hover:bg-surface-hover hover:text-content-primary active:bg-surface-secondary',
+      danger:
+        'bg-danger text-white hover:brightness-110 active:brightness-90 shadow-sm',
     };
 
-    const sizeClasses = {
-      sm: 'px-3 py-1.5 text-xs',
-      md: 'px-4 py-2 text-sm',
-      lg: 'px-6 py-3 text-base',
-    };
-
-    const widthClass = fullWidth ? 'w-full' : '';
+    const sizeClasses = iconOnly
+      ? {
+          sm: 'h-7 w-7',
+          md: 'h-9 w-9',
+          lg: 'h-11 w-11',
+        }
+      : {
+          sm: 'h-7 px-2.5 text-xs',
+          md: 'h-9 px-3.5 text-sm',
+          lg: 'h-11 px-5 text-base',
+        };
 
     return (
       <button
         ref={ref}
-        className={clsx(baseClasses, variantClasses[variant], sizeClasses[size], widthClass, className)}
+        type={type}
+        className={clsx(base, variantClasses[variant], sizeClasses[size], fullWidth && 'w-full', className)}
         disabled={disabled || loading}
         {...props}
       >
         {loading ? (
-          <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-              fill="none"
-            />
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-            />
+          <svg className="animate-spin-slow h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
           </svg>
         ) : icon && iconPosition === 'left' ? (
-          <span className="flex-shrink-0">{icon}</span>
+          <span className="shrink-0" aria-hidden="true">{icon}</span>
         ) : null}
         {children}
         {icon && iconPosition === 'right' && !loading && (
-          <span className="flex-shrink-0">{icon}</span>
+          <span className="shrink-0" aria-hidden="true">{icon}</span>
         )}
       </button>
     );
