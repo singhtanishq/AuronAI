@@ -27,7 +27,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const theme = useUIStore((s) => s.theme);
   const setThemeStore = useUIStore((s) => s.setTheme);
   const preferences = useSettingsStore((s) => s.preferences);
-  const setPreferences = useSettingsStore((s) => s.setPreferences);
   const { isAuthenticated } = useAuth();
   const [systemTheme, setSystemTheme] = useState<'light' | 'dark'>(() => getSystemTheme());
 
