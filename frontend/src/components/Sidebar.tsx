@@ -16,6 +16,7 @@ import {
   Moon,
   Sun,
   Monitor,
+  MessageSquare,
   Archive,
   ArchiveRestore,
   X,
@@ -178,6 +179,20 @@ interface RenameDialogState {
   currentTitle: string;
 }
 
+/** Tracks the lg breakpoint so collapse semantics stay desktop-only. */
+function useIsDesktop(): boolean {
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
+  );
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(min-width: 1024px)');
+    const handleChange = () => setIsDesktop(mediaQuery.matches);
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+  return isDesktop;
+}
+
 export function Sidebar() {
   const navigate = useNavigate();
   const { user, isAuthenticated, logout } = useAuth();
@@ -209,7 +224,11 @@ export function Sidebar() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
 
-  const collapsed = sidebarCollapsed;
+  const isDesktop = useIsDesktop();
+
+  // Collapse is a desktop-only concept: on mobile the sidebar is a drawer and
+  // always renders expanded, so a persisted collapsed flag can't break it.
+  const collapsed = sidebarCollapsed && isDesktop;
 
   /* ------------------------------ data helpers ------------------------------ */
 
