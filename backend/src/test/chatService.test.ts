@@ -97,6 +97,8 @@ describe('chatService', () => {
   let userId = '';
 
   beforeAll(async () => {
+    const { ensureTestDb } = await import('./setup');
+    ensureTestDb();
     const { authService } = await import('../services/authService');
     const { user } = await authService.signup('Chat Tester', email, 'password123');
     userId = user.id;
