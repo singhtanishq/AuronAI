@@ -11,22 +11,28 @@ interface AvatarProps {
 }
 
 const SIZE_CLASSES = {
-  xs: 'w-6 h-6 text-xs',
-  sm: 'w-8 h-8 text-sm',
-  md: 'w-10 h-10 text-base',
-  lg: 'w-12 h-12 text-lg',
-  xl: 'w-16 h-16 text-xl',
+  xs: 'h-6 w-6 text-[0.6rem]',
+  sm: 'h-8 w-8 text-xs',
+  md: 'h-10 w-10 text-sm',
+  lg: 'h-12 w-12 text-base',
+  xl: 'h-16 w-16 text-xl',
 };
 
 const AVATAR_COLORS = [
-  '#6366f1', '#8b5cf6', '#ec4899', '#ef4444',
-  '#f97316', '#eab308', '#22c55e', '#14b8a6',
-  '#06b6d4', '#3b82f6', '#a855f7', '#d946ef',
+  '15 118 110', // teal
+  '5 150 105', // emerald
+  '2 132 199', // sky
+  '79 70 229', // indigo
+  '124 58 237', // violet
+  '192 38 211', // fuchsia
+  '225 29 72', // rose
+  '234 88 12', // orange
+  '101 163 13', // lime
 ];
 
 function getColorFromName(name: string): string {
   let hash = 0;
-  for (let i = 0; i < name.length; i++) {
+  for (let i = 0; i < name.length; i += 1) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
   }
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
@@ -34,15 +40,17 @@ function getColorFromName(name: string): string {
 
 function getInitials(name: string): string {
   return name
-    .split(' ')
+    .trim()
+    .split(/\s+/)
     .map((part) => part[0])
+    .filter(Boolean)
     .join('')
     .toUpperCase()
-    .slice(0, 2);
+    .slice(0, 2) || '?';
 }
 
 export function Avatar({ name, color, size = 'md', className = '', src, alt }: AvatarProps) {
-  const avatarColor = color || getColorFromName(name);
+  const rgb = color ? hexToRgbTriplets(color) : getColorFromName(name);
   const initials = getInitials(name);
 
   if (src) {
@@ -58,14 +66,21 @@ export function Avatar({ name, color, size = 'md', className = '', src, alt }: A
   return (
     <div
       className={clsx(
-        'inline-flex items-center justify-center font-semibold text-white rounded-full select-none',
+        'inline-flex select-none items-center justify-center rounded-full font-semibold text-white',
         SIZE_CLASSES[size],
         className
       )}
-      style={{ backgroundColor: avatarColor }}
-      aria-label={name}
+      style={{ backgroundColor: `rgb(${rgb})` }}
+      aria-label={alt || name}
+      role="img"
     >
       {initials}
     </div>
   );
+}
+
+function hexToRgbTriplets(hex: string): string {
+  const match = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex.trim());
+  if (!match) return getColorFromName('auron');
+  return `${parseInt(match[1], 16)} ${parseInt(match[2], 16)} ${parseInt(match[3], 16)}`;
 }
