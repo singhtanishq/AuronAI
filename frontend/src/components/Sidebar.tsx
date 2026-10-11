@@ -491,7 +491,7 @@ export function Sidebar() {
         <div className={clsx('flex h-14 shrink-0 items-center border-b border-line-subtle', collapsed ? 'justify-center px-2' : 'justify-between px-4')}>
           <button
             type="button"
-            onClick={() => navigate('/chat')}
+            onClick={() => goTo('/chat')}
             className="flex items-center gap-2.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             aria-label="Auron AI home"
           >
