@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import * as path from 'path';
+import * as fs from 'fs';
 
 dotenv.config();
 
@@ -16,12 +17,23 @@ function intEnv(name: string, fallback: number, { min, max }: { min?: number; ma
 const nodeEnv = process.env.NODE_ENV || 'development';
 const isProduction = nodeEnv === 'production';
 
-// The compiled frontend is served by the backend in production. The default
-// assumes the standard workspace layout; override with STATIC_ROOT when the
-// frontend is deployed separately.
-const staticRoot = process.env.STATIC_ROOT
-  ? path.resolve(process.env.STATIC_ROOT)
-  : path.resolve(__dirname, '../../frontend/dist');
+/**
+ * Directory containing the built frontend, for production static serving.
+ * Resolved from whichever layout is in use (tsx runs from src/, the compiled
+ * server from dist/); override with STATIC_ROOT when deploying differently.
+ */
+function resolveDefaultStaticRoot(): string {
+  const candidates = [
+    path.resolve(__dirname, '../../frontend/dist'), // running from src/
+    path.resolve(__dirname, '../../../frontend/dist'), // running from dist/
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(path.join(candidate, 'index.html'))) {
+      return candidate;
+    }
+  }
+  return candidates[0];
+}
 
 export const config = {
   nodeEnv,
@@ -34,7 +46,7 @@ export const config = {
     path: process.env.DATABASE_PATH || './data/auron.db',
   },
 
-  staticRoot,
+  staticRoot: process.env.STATIC_ROOT ? path.resolve(process.env.STATIC_ROOT) : resolveDefaultStaticRoot(),
 
   ollama: {
     baseUrl: (process.env.OLLAMA_BASE_URL || 'http://localhost:11434').replace(/\/$/, ''),
