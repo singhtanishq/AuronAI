@@ -157,6 +157,12 @@ export const chatService = {
       'streaming'
     );
 
+    options.onStart?.({
+      conversationId: conversation.id,
+      userMessageId: userMessage.id,
+      assistantMessageId: assistantMessage.id,
+    });
+
     return this.runGeneration({
       userId,
       conversationId: conversation.id,
@@ -171,6 +177,7 @@ export const chatService = {
       historyConversationId: conversation.id,
       excludeMessageIds: [userMessage.id, assistantMessage.id],
       userMessageId: userMessage.id,
+      signal: options.signal,
       onChunk,
       onTitle,
       previousTitle: conversation.title,
@@ -182,13 +189,10 @@ export const chatService = {
     userId: string,
     conversationId: string,
     assistantMessageId: string,
-    onChunk?: (chunk: StreamChunk) => void
+    onChunk?: (chunk: StreamChunk) => void,
+    signal?: AbortSignal
   ): Promise<ChatResult> {
-    if (activeGenerationCountForUser(userId) >= config.chat.maxConcurrentGenerationsPerUser) {
-      throw new ConcurrencyError(
-        'You already have a generation in progress. Wait for it to finish or stop it first.'
-      );
-    }
+    this.checkCanGenerate(userId);
 
     const conversation = await conversationRepository.findById(conversationId, userId);
     if (!conversation) {
