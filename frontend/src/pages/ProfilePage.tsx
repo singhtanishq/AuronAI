@@ -1,311 +1,407 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { clsx } from 'clsx';
-import { Loader2, User, Mail, Lock, AlertCircle, CheckCircle, Camera } from 'lucide-react';
+import {
+  User as UserIcon,
+  Mail,
+  Lock,
+  AlertCircle,
+  Check,
+  MonitorSmartphone,
+  Trash2,
+  LogOut,
+  ShieldCheck,
+} from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/ui/Toast';
-import { Button, Input, Modal, Avatar } from '../components/ui';
+import { Avatar, Button, Input, ConfirmDialog } from '../components/ui';
 import { api } from '../services/api';
+import { formatDate, formatRelativeTime, parseApiDate } from '../utils/format';
+import type { SessionInfo } from '../types';
+
+type TabId = 'profile' | 'password' | 'sessions' | 'danger';
+
+const TABS: Array<{ id: TabId; label: string }> = [
+  { id: 'profile', label: 'Personal info' },
+  { id: 'password', label: 'Password' },
+  { id: 'sessions', label: 'Sessions' },
+  { id: 'danger', label: 'Danger zone' },
+];
 
 export function ProfilePage() {
-  const { user, updateProfile, changePassword, logout, logoutAll, refreshUser } = useAuth();
+  const [activeTab, setActiveTab] = useState<TabId>('profile');
+
+  return (
+    <div className="flex h-full flex-col overflow-hidden">
+      <header className="shrink-0 border-b border-line-subtle px-6 py-4">
+        <h1 className="text-xl font-bold tracking-tight text-content-primary">Profile</h1>
+      </header>
+
+      <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
+        <nav className="shrink-0 border-b border-line-subtle bg-surface-secondary/40 p-2 sm:w-52 sm:border-b-0 sm:border-r" aria-label="Profile sections">
+          <div role="tablist" className="flex gap-1 sm:flex-col">
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                role="tab"
+                aria-selected={activeTab === tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={clsx(
+                  'flex-1 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors duration-fast sm:flex-none',
+                  activeTab === tab.id
+                    ? 'bg-accent-subtle text-content-primary'
+                    : 'text-content-secondary hover:bg-surface-hover hover:text-content-primary',
+                  tab.id === 'danger' && activeTab !== tab.id ? 'text-danger/80' : ''
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </nav>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">
+          <div className="max-w-2xl">
+            {activeTab === 'profile' && <PersonalInfoSection />}
+            {activeTab === 'password' && <PasswordSection />}
+            {activeTab === 'sessions' && <SessionsSection />}
+            {activeTab === 'danger' && <DangerZoneSection />}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
+  return (
+    <section className="space-y-3 pb-8">
+      <div>
+        <h2 className="text-base font-semibold text-content-primary">{title}</h2>
+        {description && <p className="mt-0.5 text-sm text-content-muted">{description}</p>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/* ------------------------------ personal info ------------------------------ */
+
+function PersonalInfoSection() {
+  const { user, updateProfile } = useAuth();
   const { addToast } = useToast();
-  const [activeTab, setActiveTab] = useState<'profile' | 'password' | 'sessions'>('profile');
+  const [name, setName] = useState(user?.name ?? '');
+  const [email, setEmail] = useState(user?.email ?? '');
+  const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [savedFlash, setSavedFlash] = useState(false);
 
-  // Profile form state
-  const [name, setName] = useState(user?.name || '');
-  const [email, setEmail] = useState(user?.email || '');
+  useEffect(() => {
+    if (user) {
+      setName((current) => (current === '' ? user.name : current));
+      setEmail((current) => (current === '' ? user.email : current));
+    }
+  }, [user]);
 
-  // Password form state
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const dirty = user ? name.trim() !== user.name || email.trim().toLowerCase() !== user.email.toLowerCase() : false;
 
-  // Errors
-  const [profileError, setProfileError] = useState('');
-  const [passwordError, setPasswordError] = useState('');
-
-  const handleProfileSave = async () => {
-    setProfileError('');
+  const handleSave = async () => {
+    setError('');
+    if (!name.trim()) {
+      setError('Name cannot be empty.');
+      return;
+    }
     setSaving(true);
     try {
-      await updateProfile({ name, email });
-      await refreshUser();
+      // One request updates both fields; the backend applies them together.
+      await updateProfile({ name: name.trim(), email: email.trim() });
       addToast('Profile updated', 'success');
+      setSavedFlash(true);
+      setTimeout(() => setSavedFlash(false), 1600);
     } catch (err) {
-      setProfileError(err instanceof Error ? err.message : 'Failed to update profile');
+      setError(err instanceof Error ? err.message : 'Failed to update profile.');
     } finally {
       setSaving(false);
     }
-  };
-
-  const handlePasswordChange = async () => {
-    setPasswordError('');
-    if (newPassword !== confirmNewPassword) {
-      setPasswordError('Passwords do not match');
-      return;
-    }
-    if (newPassword.length < 8) {
-      setPasswordError('Password must be at least 8 characters');
-      return;
-    }
-    setSaving(true);
-    try {
-      await changePassword(currentPassword, newPassword, confirmNewPassword);
-      addToast('Password changed. Please log in again.', 'success');
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmNewPassword('');
-      logout();
-    } catch (err) {
-      setPasswordError(err instanceof Error ? err.message : 'Failed to change password');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleLogoutAll = async () => {
-    await logoutAll();
-    addToast('Logged out from all devices', 'success');
   };
 
   if (!user) return null;
 
   return (
-    <div className="flex-1 flex flex-col">
-      <div className="border-b border-border-light dark:border-border-dark px-6 py-4">
-        <h1 className="text-2xl font-bold text-text-primary">Profile</h1>
+    <Section title="Personal information" description="Your name and email identify you on this device.">
+      <div className="card space-y-4 p-5">
+        <div className="flex items-center gap-4">
+          <Avatar name={user.name} size="xl" color={user.avatarColor} />
+          <div>
+            <p className="font-medium text-content-primary">{user.name}</p>
+            <p className="text-sm text-content-muted">{user.email}</p>
+          </div>
+        </div>
+
+        {error && (
+          <div className="flex items-start gap-2 rounded-lg border border-danger/25 bg-danger-subtle p-3 text-sm text-danger" role="alert">
+            <AlertCircle size={15} className="mt-0.5 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} icon={<UserIcon size={16} />} maxLength={100} disabled={saving} />
+        <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} icon={<Mail size={16} />} disabled={saving} />
+
+        <div className="flex items-center justify-end gap-2.5 border-t border-line-subtle pt-4">
+          <Button variant="secondary" onClick={() => { setName(user.name); setEmail(user.email); setError(''); }} disabled={!dirty || saving}>
+            Reset
+          </Button>
+          <Button variant="primary" onClick={() => void handleSave()} loading={saving} disabled={!dirty}>
+            {savedFlash ? <Check size={16} /> : null}
+            Save changes
+          </Button>
+        </div>
+
+        <p className="text-xs text-content-muted">Member since {formatDate(user.createdAt)}</p>
       </div>
+    </Section>
+  );
+}
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar tabs */}
-        <nav className="w-48 flex-shrink-0 border-r border-border-light dark:border-border-dark bg-background-primary/50 dark:bg-surface-900/50" aria-label="Profile categories">
-          <ul className="p-3 space-y-1" role="tablist">
-            {[
-              { id: 'profile', label: 'Personal Info', icon: User },
-              { id: 'password', label: 'Password', icon: Lock },
-              { id: 'sessions', label: 'Sessions', icon: Camera },
-            ].map((tab) => {
-              const Icon = tab.icon;
-              return (
-                <li key={tab.id} role="presentation">
-                  <button
-                    role="tab"
-                    aria-selected={activeTab === tab.id}
-                    onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                    className={clsx(
-                      'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
-                      activeTab === tab.id
-                        ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
-                        : 'text-text-secondary hover:text-text-primary hover:bg-surface-100 dark:hover:bg-surface-800'
+/* -------------------------------- password -------------------------------- */
+
+function PasswordSection() {
+  const { changePassword } = useAuth();
+  const { addToast } = useToast();
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (newPassword.length < 8) {
+      setError('New password must be at least 8 characters.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('New passwords do not match.');
+      return;
+    }
+    setSaving(true);
+    try {
+      // Invalidates every session; the auth context clears local state.
+      await changePassword(currentPassword, newPassword, confirmPassword);
+      addToast('Password changed. Please sign in again.', 'success');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to change password.');
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Section title="Change password" description="Changing your password signs you out on all devices.">
+      <form onSubmit={handleSubmit} className="card max-w-md space-y-4 p-5">
+        {error && (
+          <div className="flex items-start gap-2 rounded-lg border border-danger/25 bg-danger-subtle p-3 text-sm text-danger" role="alert">
+            <AlertCircle size={15} className="mt-0.5 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+        <Input
+          label="Current password"
+          type="password"
+          value={currentPassword}
+          onChange={(e) => setCurrentPassword(e.target.value)}
+          icon={<Lock size={16} />}
+          showPasswordToggle
+          autoComplete="current-password"
+          required
+          disabled={saving}
+        />
+        <Input
+          label="New password"
+          type="password"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          icon={<Lock size={16} />}
+          showPasswordToggle
+          autoComplete="new-password"
+          required
+          disabled={saving}
+          hint="At least 8 characters."
+        />
+        <Input
+          label="Confirm new password"
+          type="password"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          icon={<Lock size={16} />}
+          showPasswordToggle
+          autoComplete="new-password"
+          required
+          disabled={saving}
+          error={confirmPassword && newPassword !== confirmPassword ? 'Passwords do not match' : undefined}
+        />
+        <div className="flex justify-end border-t border-line-subtle pt-4">
+          <Button type="submit" variant="primary" loading={saving} disabled={!currentPassword || !newPassword}>
+            Change password
+          </Button>
+        </div>
+      </form>
+    </Section>
+  );
+}
+
+/* -------------------------------- sessions -------------------------------- */
+
+function SessionsSection() {
+  const { logoutAll } = useAuth();
+  const { addToast } = useToast();
+  const [sessions, setSessions] = useState<SessionInfo[] | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const response = await api.auth.listSessions();
+      setSessions(response.sessions);
+      setLoadError(false);
+    } catch {
+      setLoadError(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const handleRevoke = async (id: string) => {
+    setRevokingId(id);
+    try {
+      await api.auth.revokeSession(id);
+      setSessions((current) => (current ? current.filter((s) => s.id !== id) : current));
+      addToast('Session revoked', 'success');
+    } catch {
+      addToast('Failed to revoke session', 'error');
+    } finally {
+      setRevokingId(null);
+    }
+  };
+
+  return (
+    <Section title="Active sessions" description="Every signed-in device. Revoke any session you don't recognize.">
+      {loadError ? (
+        <div className="flex items-center justify-between rounded-lg border border-danger/25 bg-danger-subtle p-3.5 text-sm text-danger">
+          <span>Could not load sessions.</span>
+          <Button variant="ghost" size="sm" onClick={() => void load()}>Retry</Button>
+        </div>
+      ) : sessions === null ? (
+        <div className="card h-16 animate-pulse bg-surface-secondary" />
+      ) : (
+        <div className="space-y-2.5">
+          {sessions.map((session) => (
+            <div key={session.id} className="card flex items-center justify-between gap-3 p-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-subtle text-accent">
+                  <MonitorSmartphone size={17} />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-content-primary">
+                    Signed in {formatRelativeTime(session.createdAt)}
+                    {session.isCurrent && (
+                      <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-ok-subtle px-2 py-0.5 text-[0.68rem] font-medium text-ok">
+                        <ShieldCheck size={10} /> this device
+                      </span>
                     )}
-                  >
-                    <Icon className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
-                    {tab.label}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {activeTab === 'profile' && (
-            <div className="max-w-2xl space-y-6">
-              <section className="space-y-4">
-                <h2 className="text-lg font-semibold text-text-primary">Personal Information</h2>
-                <p className="text-sm text-text-muted">Update your name and email address</p>
-
-                <div className="card p-6 space-y-4">
-                  <div className="flex items-center gap-4">
-                    <Avatar name={user.name} size="xl" />
-                    <div>
-                      <p className="font-medium text-text-primary">Current avatar</p>
-                      <p className="text-sm text-text-muted">Generated from your name</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="card p-6 space-y-4">
-                  {profileError && (
-                    <div className="flex items-center gap-2 p-3 bg-error-light dark:bg-error-dark/20 rounded-lg text-sm text-error-dark dark:text-error-light" role="alert">
-                      <AlertCircle size={16} />
-                      <span>{profileError}</span>
-                    </div>
-                  )}
-
-                  <Input
-                    label="Name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Your name"
-                    icon={<User size={18} />}
-                    required
-                    disabled={saving}
-                  />
-
-                  <Input
-                    label="Email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    icon={<Mail size={18} />}
-                    required
-                    disabled={saving}
-                  />
-
-                  <div className="flex justify-end pt-4 border-t border-border-light dark:border-border-dark">
-                    <Button variant="primary" onClick={handleProfileSave} loading={saving}>
-                      <CheckCircle size={18} />
-                      Save Changes
-                    </Button>
-                  </div>
-                </div>
-              </section>
-
-              <section className="space-y-4 pt-6 border-t border-border-light dark:border-border-dark">
-                <h2 className="text-lg font-semibold text-text-primary">Account Info</h2>
-                <div className="card p-4 space-y-3">
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <p className="text-text-muted">User ID</p>
-                      <p className="font-mono text-text-primary break-all">{user.id}</p>
-                    </div>
-                    <div>
-                      <p className="text-text-muted">Created</p>
-                      <p className="font-medium text-text-primary">{new Date(user.createdAt).toLocaleDateString()}</p>
-                    </div>
-                  </div>
-                </div>
-              </section>
-            </div>
-          )}
-
-          {activeTab === 'password' && (
-            <div className="max-w-md space-y-6">
-              <section className="space-y-4">
-                <h2 className="text-lg font-semibold text-text-primary">Change Password</h2>
-                <p className="text-sm text-text-muted">Your password must be at least 8 characters</p>
-
-                <div className="card p-6 space-y-4">
-                  {passwordError && (
-                    <div className="flex items-center gap-2 p-3 bg-error-light dark:bg-error-dark/20 rounded-lg text-sm text-error-dark dark:text-error-light" role="alert">
-                      <AlertCircle size={16} />
-                      <span>{passwordError}</span>
-                    </div>
-                  )}
-
-                  <Input
-                    label="Current Password"
-                    type="password"
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                    placeholder="••••••••"
-                    icon={<Lock size={18} />}
-                    showPasswordToggle
-                    required
-                    autoComplete="current-password"
-                    disabled={saving}
-                  />
-
-                  <Input
-                    label="New Password"
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="••••••••"
-                    icon={<Lock size={18} />}
-                    showPasswordToggle
-                    required
-                    autoComplete="new-password"
-                    disabled={saving}
-                    hint={
-                      <div className="space-y-1 mt-1">
-                        <div className="flex items-center gap-1.5 text-xs">
-                          <span className={clsx('w-3.5 h-3.5 rounded border flex items-center justify-center', newPassword.length >= 8 ? 'border-success-DEFAULT text-success-DEFAULT bg-success-light dark:bg-success-dark/20' : 'border-border-medium text-text-muted')}>
-                            {newPassword.length >= 8 && <CheckCircle size={10} />}
-                          </span>
-                          <span className={clsx(newPassword.length >= 8 ? 'text-success-DEFAULT' : 'text-text-muted')}>At least 8 characters</span>
-                        </div>
-                      </div>
-                    }
-                  />
-
-                  <Input
-                    label="Confirm New Password"
-                    type="password"
-                    value={confirmNewPassword}
-                    onChange={(e) => setConfirmNewPassword(e.target.value)}
-                    placeholder="••••••••"
-                    icon={<Lock size={18} />}
-                    showPasswordToggle
-                    required
-                    autoComplete="new-password"
-                    disabled={saving}
-                    error={confirmNewPassword && newPassword !== confirmNewPassword ? 'Passwords do not match' : undefined}
-                  />
-
-                  <div className="flex justify-end pt-4 border-t border-border-light dark:border-border-dark">
-                    <Button variant="primary" onClick={handlePasswordChange} loading={saving}>
-                      <CheckCircle size={18} />
-                      Change Password
-                    </Button>
-                  </div>
-                </div>
-              </section>
-            </div>
-          )}
-
-          {activeTab === 'sessions' && (
-            <div className="max-w-2xl space-y-6">
-              <section className="space-y-4">
-                <h2 className="text-lg font-semibold text-text-primary">Active Sessions</h2>
-                <p className="text-sm text-text-muted">Manage your active login sessions</p>
-
-                <div className="card p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
-                        <Camera size={20} className="text-primary-600 dark:text-primary-400" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-text-primary">Current Session</p>
-                        <p className="text-sm text-text-muted">This device • Active now</p>
-                      </div>
-                    </div>
-                    <span className="badge badge-success">Current</span>
-                  </div>
-                </div>
-
-                <div className="card p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-surface-200 dark:bg-surface-700 flex items-center justify-center">
-                        <Camera size={20} className="text-text-muted" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-text-primary">Other Sessions</p>
-                        <p className="text-sm text-text-muted">No other active sessions</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-border-light dark:border-border-dark">
-                  <Button variant="secondary" onClick={handleLogoutAll} icon={<Loader2 size={18} />}>
-                    Log Out of All Sessions
-                  </Button>
-                  <p className="mt-2 text-sm text-text-muted">
-                    This will log you out from all devices including this one.
+                  </p>
+                  <p className="truncate text-xs text-content-muted">
+                    Expires {parseApiDate(session.expiresAt)?.toLocaleDateString() ?? 'unknown'}
                   </p>
                 </div>
-              </section>
+              </div>
+              {session.isCurrent ? (
+                <Button variant="secondary" size="sm" icon={<LogOut size={14} />} onClick={() => void logoutAll()}>
+                  Log out
+                </Button>
+              ) : (
+                <Button variant="secondary" size="sm" loading={revokingId === session.id} onClick={() => void handleRevoke(session.id)}>
+                  Revoke
+                </Button>
+              )}
             </div>
-          )}
+          ))}
+        </div>
+      )}
+
+      <div className="pt-2">
+        <Button variant="secondary" icon={<LogOut size={15} />} onClick={() => void logoutAll()}>
+          Log out of all devices
+        </Button>
+        <p className="mt-2 text-xs text-content-muted">Ends every session, including this one.</p>
+      </div>
+    </Section>
+  );
+}
+
+/* ------------------------------- danger zone ------------------------------- */
+
+function DangerZoneSection() {
+  const { user, deleteAccount } = useAuth();
+  const { addToast } = useToast();
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    if (!deleteTargetPassword) return;
+    setDeleting(true);
+    try {
+      await deleteAccount(deleteTargetPassword);
+      addToast('Account deleted', 'success');
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Failed to delete account', 'error');
+      setDeleting(false);
+      setShowConfirm(false);
+    }
+  };
+
+  const [deleteTargetPassword, setDeleteTargetPassword] = useState('');
+  const DeleteDialog = (
+    <ConfirmDialog
+      isOpen={showConfirm}
+      onClose={() => setShowConfirm(false)}
+      onConfirm={() => void handleDelete()}
+      title="Delete account?"
+      description="Your account, conversations, messages, and preferences will be permanently removed from this device."
+      confirmLabel="Delete account"
+      danger
+      requireText="DELETE"
+      loading={deleting}
+    />
+  );
+
+  if (!user) return null;
+
+  return (
+    <Section title="Danger zone" description="These actions are permanent.">
+      {DeleteDialog}
+      <div className="rounded-lg border border-danger/30 bg-danger-subtle/40 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-content-primary">Delete this account</p>
+            <p className="mt-0.5 text-xs text-content-muted">
+              Removes {user.email} and all associated data from this machine.
+            </p>
+          </div>
+          <Button
+            variant="danger"
+            icon={<Trash2 size={15} />}
+            onClick={() => {
+              setDeleteTargetPassword('');
+              setShowConfirm(true);
+            }}
+          >
+            Delete account…
+          </Button>
         </div>
       </div>
-    </div>
+    </Section>
   );
 }
