@@ -203,11 +203,14 @@ export function ChatArea() {
           updateMessage(stream.messageId, { content: stream.content, status });
         }
         useChatStore.getState().dropStreamContent(stream.messageId);
-        if (status === 'completed') {
+        if (status === 'completed' || status === 'aborted') {
           useConversationStore.getState().updateConversation(stream.targetId || '', {
-            lastMessagePreview: stream.content.slice(0, 120),
+            lastMessagePreview: stream.content.slice(0, 120) || undefined,
             updatedAt: new Date().toISOString(),
           });
+        }
+        if (viewing && nearBottomRef.current) {
+          requestAnimationFrame(() => endRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' }));
         }
       }
       streamRef.current = { targetId: null, messageId: null, content: '', buffer: '', raf: null };
