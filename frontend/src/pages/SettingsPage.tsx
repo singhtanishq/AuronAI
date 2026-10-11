@@ -89,32 +89,39 @@ function ToggleRow({
   disabled?: boolean;
 }) {
   return (
-    <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border border-line-subtle bg-surface-primary p-4 transition-colors hover:bg-surface-hover/60">
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={clsx(
+        'flex w-full items-center justify-between gap-4 rounded-lg border border-line-subtle bg-surface-primary p-4 text-left',
+        'transition-colors duration-fast hover:bg-surface-hover/60',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+        disabled && 'cursor-not-allowed opacity-50'
+      )}
+    >
       <span className="min-w-0">
         <span className="block text-sm font-medium text-content-primary">{label}</span>
         {description && <span className="mt-0.5 block text-xs text-content-muted">{description}</span>}
       </span>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        aria-label={label}
-        disabled={disabled}
-        onClick={() => onChange(!checked)}
+      <span
         className={clsx(
-          'relative h-6 w-11 shrink-0 rounded-full transition-colors duration-fast',
-          checked ? 'bg-accent-solid' : 'bg-line-default',
-          disabled && 'cursor-not-allowed opacity-50'
+          'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-fast',
+          checked ? 'bg-accent-solid' : 'bg-content-muted/30'
         )}
+        aria-hidden="true"
       >
         <span
           className={clsx(
-            'absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-fast ease-out',
+            'inline-block h-5 w-5 rounded-full bg-white shadow transition-transform duration-fast ease-out',
             checked ? 'translate-x-[22px]' : 'translate-x-0.5'
           )}
         />
-      </button>
-    </label>
+      </span>
+    </button>
   );
 }
 
