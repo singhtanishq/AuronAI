@@ -32,7 +32,6 @@ This document describes the architecture of Auron AI, a locally runnable AI chat
 App
 ├── ThemeProvider
 ├── AuthProvider
-├── TooltipProvider
 ├── ToastProvider
 └── Router
     ├── Public Routes
@@ -115,7 +114,7 @@ src/
 │   ├── messageRepository.ts
 │   └── preferencesRepository.ts
 ├── middleware/      # Express middleware
-│   ├── auth.ts           # JWT authentication
+│   ├── auth.ts           # Cookie-based session authentication
 │   ├── validation.ts     # Zod schema validation
 │   └── errorHandler.ts   # Error handling
 ├── database/        # SQLite setup
@@ -131,7 +130,7 @@ src/
 ```
 1. Frontend: User sends message
 2. POST /api/ai/chat (with conversationId, message, model, temperature, systemPrompt)
-3. Backend: authMiddleware validates JWT
+3. Backend: authMiddleware validates the session cookie against hashed session rows
 4. Backend: Creates/retrieves conversation
 5. Backend: Saves user message to DB
 6. Backend: Creates assistant message placeholder (streaming)
@@ -286,7 +285,7 @@ interface StreamChunk {
 
 ### Session Management
 
-- JWT tokens (HS256)
+- Opaque session tokens (SHA-256 hashes in SQLite)
 - 30-day expiration
 - Stored in HttpOnly, Secure, SameSite=Lax cookies
 - Token hash stored in database (not raw token)
