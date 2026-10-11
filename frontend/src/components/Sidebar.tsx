@@ -39,7 +39,7 @@ interface ConversationRowProps {
   onTogglePin: () => void;
   onArchive: () => void;
   onDelete: () => void;
-  onRename: (title: string) => void;
+  onRename: () => void;
 }
 
 function ConversationRow({
