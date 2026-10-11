@@ -96,18 +96,22 @@ describe('authService.logout', () => {
 });
 
 describe('authService.changePassword', () => {
-  it('invalidates all sessions and rejects the old password', async () => {
+  it('invalidates all sessions and only accepts the new password afterwards', async () => {
     const { user, token } = await authService.signup('Change', 'change@example.com', 'password123');
     await authService.login('change@example.com', 'password123');
 
     await authService.changePassword(user.id, 'password123', 'newpassword456');
 
+    // All sessions are dead…
     expect(await authService.validateToken(token)).toBeNull();
-
-    const loginOld = await authService.login('change@example.com', 'password123');
-    expect(loginOld).toBeDefined(); // re-login works with new session
+    // …the old password no longer works…
+    await expect(authService.login('change@example.com', 'password123')).rejects.toThrow(
+      'Invalid email or password'
+    );
+    // …and the new one does.
     const loginNew = await authService.login('change@example.com', 'newpassword456');
     expect((await authService.validateToken(loginNew.token))?.id).toBe(user.id);
+    // Changing back requires the current (new) password.
     await expect(authService.changePassword(user.id, 'password123', 'anotherpass1')).rejects.toThrow(
       'Current password is incorrect'
     );
