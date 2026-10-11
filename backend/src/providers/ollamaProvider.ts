@@ -183,7 +183,6 @@ export class OllamaProvider implements AIProvider {
     let buffer = '';
     let content = '';
     let idleTimer: ReturnType<typeof setTimeout> | null = null;
-    void this.idleTimeoutMs;
 
     const armIdleTimer = () => {
       if (idleTimer) clearTimeout(idleTimer);
