@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { clsx } from 'clsx';
-import { Cpu, Monitor, Moon, Sun, Database, ShieldCheck, Wifi, AlertCircle } from 'lucide-react';
+import { Cpu, Monitor, Moon, Sun, Database, ShieldCheck, Wifi, AlertCircle, Menu } from 'lucide-react';
 import { useSettingsStore, useUIStore, useConversationStore, useChatStore } from '../stores';
 import { useTheme, usePreferences, type Theme } from '../contexts/ThemeContext';
 import { useToast } from '../components/ui/Toast';
@@ -19,10 +19,19 @@ const TABS: Array<{ id: TabId; label: string }> = [
 
 export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<TabId>('appearance');
+  const setMobileSidebarOpen = useUIStore((s) => s.setMobileSidebarOpen);
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <header className="shrink-0 border-b border-line-subtle px-6 py-4">
+      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line-subtle px-4 sm:px-6">
+        <button
+          type="button"
+          onClick={() => setMobileSidebarOpen(true)}
+          className="icon-btn lg:hidden"
+          aria-label="Open sidebar"
+        >
+          <Menu size={20} />
+        </button>
         <h1 className="text-xl font-bold tracking-tight text-content-primary">Settings</h1>
       </header>
 
