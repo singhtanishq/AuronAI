@@ -150,9 +150,6 @@ export const chatService = {
       'streaming'
     );
 
-    onChunkReset:
-    onChunk?.({ type: 'content', content: '' }); // no-op guard removed below
-
     return this.runGeneration({
       userId,
       conversationId: conversation.id,
@@ -229,12 +226,7 @@ export const chatService = {
     const effectiveTemperature = preferences.temperature;
 
     await messageRepository.updateContent(assistantMessageId, '');
-    await messageRepository.finalize({ status: 'streaming' } as never && {
-      status: 'streaming',
-    } as never && { status: 'streaming' } as never) as unknown as void;
-    await messageRepository.finalize({ status: 'streaming' } as never && {
-      status: 'streaming',
-    } as never && { status: 'streaming' } as never) as unknown as void;
+    await messageRepository.finalize(assistantMessageId, { status: 'streaming' });
 
     return this.runGeneration({
       userId,
