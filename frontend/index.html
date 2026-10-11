@@ -3,13 +3,26 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Auron AI - A locally runnable, open-source AI chatbot powered by Ollama" />
-    <meta name="theme-color" content="#6366f1" />
-    <title>Auron AI — Powered by Tanishq Singh</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="Auron AI — A locally runnable, open-source AI chatbot powered by Ollama" />
+    <meta name="theme-color" content="#0f766e" />
+    <title>Auron AI — Your local AI assistant</title>
+    <script>
+      // Apply the stored theme before first paint to avoid a flash of the
+      // wrong color scheme. Kept dependency-free and resilient to failures.
+      (function () {
+        try {
+          var stored = null;
+          try { stored = JSON.parse(localStorage.getItem('auron-ui') || 'null'); } catch (e) { /* ignore */ }
+          var theme = (stored && stored.state && stored.state.theme) || 'system';
+          var dark = theme === 'dark' || (
+            theme === 'system' &&
+            window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+          );
+          if (dark) document.documentElement.classList.add('dark');
+        } catch (e) { /* ignore */ }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
