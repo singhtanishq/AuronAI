@@ -59,9 +59,15 @@ export const authService = {
     }
 
     // User and default preferences are created atomically: a failure must not
-    // leave a partial account behind.
+    // leave a partial account behind. Password hashing happens before the
+    // transaction because SQLite transactions are synchronous.
+    const passwordHash = await userRepository.hashPassword(password);
     const user = await withTransaction(async () => {
-      const created = await userRepository.create(name.trim(), normalizedEmail, password);
+      const created = userRepository.insertUser({
+        name: name.trim(),
+        email: normalizedEmail,
+        passwordHash,
+      });
       await preferencesRepository.create(created.id);
       return created;
     });
