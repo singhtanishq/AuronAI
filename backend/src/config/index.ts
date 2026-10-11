@@ -73,7 +73,7 @@ export const config = {
     // Auth attempts get a much tighter budget; note /api/auth/me is NOT
     // included (it runs on every app load and must not lock users out).
     authWindowMs: 15 * 60 * 1000,
-    authMaxAttempts: 20,
+    authMaxAttempts: intEnv('AUTH_RATE_LIMIT_MAX', 20, { min: 5 }),
     generationWindowMs: 60 * 1000,
     generationMaxRequests: 30,
   },
