@@ -10,13 +10,15 @@ import './styles/index.css';
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
-      <ThemeProvider>
-        <AuthProvider>
+      {/* AuthProvider must wrap ThemeProvider: the theme mirrors the
+          signed-in user's server-side preferences. */}
+      <AuthProvider>
+        <ThemeProvider>
           <ToastProvider>
             <App />
           </ToastProvider>
-        </AuthProvider>
-      </ThemeProvider>
+        </ThemeProvider>
+      </AuthProvider>
     </BrowserRouter>
   </React.StrictMode>
 );
