@@ -1,4 +1,3 @@
-import { config } from '../config';
 import { messageRepository } from '../repositories/messageRepository';
 import { chatService, activeGenerationCountForUser } from '../services/chatService';
 import { getAIProvider, setAIProvider, resetAIProvider } from '../providers';
