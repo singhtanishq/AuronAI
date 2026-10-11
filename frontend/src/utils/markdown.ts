@@ -19,14 +19,17 @@ renderer.code = (code: string, infostring: string | undefined) => {
   const lang = (infostring || '').split(/\s+/)[0].toLowerCase();
   const label = lang || 'text';
 
+  // Highlight only languages hljs knows; unknown or unlabeled blocks are
+  // escaped plainly, which is faster and immune to misdetection.
   let highlighted: string;
-  try {
-    highlighted =
-      lang && hljs.getLanguage(lang)
-        ? hljs.highlight(code, { language: lang, ignoreIllegals: true }).value
-        : hljs.highlightAuto(code).value;
-  } catch {
-    highlighted = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  if (lang && hljs.getLanguage(lang)) {
+    try {
+      highlighted = hljs.highlight(code, { language: lang, ignoreIllegals: true }).value;
+    } catch {
+      highlighted = escapeHtml(code);
+    }
+  } else {
+    highlighted = escapeHtml(code);
   }
 
   return (
