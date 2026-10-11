@@ -1,6 +1,6 @@
 import { config } from '../config';
 import { messageRepository } from '../repositories/messageRepository';
-import { chatService } from '../services/chatService';
+import { chatService, activeGenerationCountForUser } from '../services/chatService';
 import { getAIProvider, setAIProvider, resetAIProvider } from '../providers';
 import type { AIProvider } from '../providers/aiProvider';
 import type { ChatRequest, ModelInfo, ProviderHealth, StreamChunk, StreamResult } from '../types';
@@ -265,6 +265,13 @@ describe('chatService', () => {
 
     const first = chatService.sendMessage({ userId, message: 'long running one', model: 'mock-model' });
     const second = chatService.sendMessage({ userId, message: 'long running two', model: 'mock-model' });
+
+    // Both generations must be registered (async setup) before the limit applies.
+    for (let i = 0; i < 200; i += 1) {
+      if (activeGenerationCountForUser(userId) >= 2) break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    expect(activeGenerationCountForUser(userId)).toBe(2);
 
     await expect(
       chatService.sendMessage({ userId, message: 'third concurrent', model: 'mock-model' })
