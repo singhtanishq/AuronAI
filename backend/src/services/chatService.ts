@@ -31,7 +31,9 @@ interface ChatServiceOptions {
   model?: string;
   temperature?: number;
   systemPrompt?: string;
+  signal?: AbortSignal;
   onChunk?: (chunk: StreamChunk) => void;
+  onStart?: (info: { conversationId: string; userMessageId: string; assistantMessageId: string }) => void;
   onTitle?: (conversationId: string, title: string) => void;
 }
 
@@ -116,14 +118,19 @@ function estimateTokens(content: string): number {
 }
 
 export const chatService = {
-  async sendMessage(options: ChatServiceOptions): Promise<ChatResult> {
-    const { userId, conversationId, message, model, temperature, systemPrompt, onChunk, onTitle } = options;
-
+  /** Pre-flight concurrency check for routes that want a clean HTTP 429. */
+  checkCanGenerate(userId: string): void {
     if (activeGenerationCountForUser(userId) >= config.chat.maxConcurrentGenerationsPerUser) {
       throw new ConcurrencyError(
         'You already have a generation in progress. Wait for it to finish or stop it first.'
       );
     }
+  },
+
+  async sendMessage(options: ChatServiceOptions): Promise<ChatResult> {
+    const { userId, conversationId, message, model, temperature, systemPrompt, onChunk, onTitle } = options;
+
+    this.checkCanGenerate(userId);
 
     let conversation;
     if (conversationId) {
