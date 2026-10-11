@@ -170,13 +170,6 @@ function ConversationRow({
     </div>
   );
 
-  if (collapsed) {
-    return (
-      <Tooltip content={conversation.title} placement="right">
-        {row}
-      </Tooltip>
-    );
-  }
   return row;
 }
 
