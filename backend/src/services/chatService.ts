@@ -3,9 +3,26 @@ import { conversationRepository } from '../repositories/conversationRepository';
 import { messageRepository } from '../repositories/messageRepository';
 import { preferencesRepository } from '../repositories/preferencesRepository';
 import { buildSystemPrompt } from '../prompts/systemPrompt';
-import { ChatRequest, StreamChunk, Message, Conversation } from '../types';
+import { ChatRequest, ContextMessage, Message, StreamChunk } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../utils/logger';
+import { config } from '../config';
+
+export class ChatError extends Error {
+  constructor(
+    message: string,
+    public readonly code: string = 'CHAT_ERROR'
+  ) {
+    super(message);
+    this.name = 'ChatError';
+  }
+}
+
+export class ConcurrencyError extends ChatError {
+  constructor(message: string) {
+    super(message, 'CONCURRENCY_LIMIT');
+  }
+}
 
 interface ChatServiceOptions {
   userId: string;
@@ -15,108 +32,146 @@ interface ChatServiceOptions {
   temperature?: number;
   systemPrompt?: string;
   onChunk?: (chunk: StreamChunk) => void;
+  onTitle?: (conversationId: string, title: string) => void;
 }
 
-interface ChatResult {
+export interface ChatResult {
   conversationId: string;
   userMessageId: string;
   assistantMessageId: string;
   content: string;
+  status: 'completed' | 'aborted' | 'error';
+  error?: string;
+  title?: string;
+}
+
+interface ActiveGeneration {
+  userId: string;
+  conversationId: string;
+  assistantMessageId: string;
+  controller: AbortController;
+}
+
+/** One entry per in-flight generation; abort targets are validated against this. */
+const activeGenerations = new Map<string, ActiveGeneration>();
+
+export function activeGenerationCountForUser(userId: string): number {
+  let count = 0;
+  for (const generation of activeGenerations.values()) {
+    if (generation.userId === userId) count += 1;
+  }
+  return count;
+}
+
+export function abortAllGenerations(): void {
+  for (const generation of activeGenerations.values()) {
+    generation.controller.abort();
+  }
+}
+
+/**
+ * Build the message history sent to the model.
+ *
+ * - Newest messages are preferred; older turns are dropped once the budget
+ *   is exhausted (the current user prompt is handled separately and is
+ *   never truncated).
+ * - A single oversized history message is trimmed from its head with an
+ *   explicit omission marker rather than silently dropped.
+ */
+export function buildContextHistory(
+  history: Array<{ role: ContextMessage['role']; content: string }>,
+  budgetChars: number,
+  maxMessageChars: number
+): ContextMessage[] {
+  const kept: ContextMessage[] = [];
+  let used = 0;
+
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    const entry = history[i];
+    let content = entry.content;
+    if (!content.trim()) continue;
+
+    if (content.length > maxMessageChars) {
+      content = `[... earlier text omitted ...]\n${content.slice(-maxMessageChars)}`;
+    }
+
+    if (used + content.length > budgetChars) {
+      if (kept.length === 0 && entry.role === 'user') {
+        // Always keep at least the most recent user turn.
+        kept.unshift({ role: entry.role, content });
+        used += content.length;
+      }
+      break;
+    }
+
+    kept.unshift({ role: entry.role, content });
+    used += content.length;
+  }
+
+  return kept;
+}
+
+function estimateTokens(content: string): number {
+  return Math.round(content.length / 4);
 }
 
 export const chatService = {
   async sendMessage(options: ChatServiceOptions): Promise<ChatResult> {
-    const { userId, conversationId, message, model, temperature, systemPrompt, onChunk } = options;
+    const { userId, conversationId, message, model, temperature, systemPrompt, onChunk, onTitle } = options;
 
-    let conversation: Conversation;
+    if (activeGenerationCountForUser(userId) >= config.chat.maxConcurrentGenerationsPerUser) {
+      throw new ConcurrencyError(
+        'You already have a generation in progress. Wait for it to finish or stop it first.'
+      );
+    }
 
+    let conversation;
     if (conversationId) {
       const existing = await conversationRepository.findById(conversationId, userId);
       if (!existing) {
-        throw new Error('Conversation not found');
+        throw new ChatError('Conversation not found', 'NOT_FOUND');
       }
       conversation = existing;
     } else {
       conversation = await conversationRepository.create(userId, 'New Chat');
     }
 
-    // Save user message
-    const userMessage = await messageRepository.createUserMessage(conversation.id, message);
-
-    // Get user preferences for model and system prompt
     const preferences = await preferencesRepository.get(userId);
     const effectiveModel = model || preferences.model;
     const effectiveSystemPrompt = buildSystemPrompt(systemPrompt || preferences.systemPrompt);
     const effectiveTemperature = temperature ?? preferences.temperature;
 
-    // Create assistant message placeholder
+    // User message and assistant placeholder are persisted before generation
+    // starts so a crash never loses the user's prompt.
+    const userMessage = await messageRepository.createUserMessage(conversation.id, message);
     const assistantMessage = await messageRepository.createAssistantMessage(
       conversation.id,
-      '',
       effectiveModel,
       'streaming'
     );
 
-    const startTime = Date.now();
-    let fullContent = '';
-    let tokenCount = 0;
+    onChunkReset:
+    onChunk?.({ type: 'content', content: '' }); // no-op guard removed below
 
-    const provider = getAIProvider();
-
-    // Build context with recent messages
-    const recentMessages = await messageRepository.findRecentByConversationId(conversation.id, 20);
-    const contextMessages = recentMessages
-      .filter(m => m.id !== userMessage.id && m.id !== assistantMessage.id)
-      .map(m => ({ role: m.role, content: m.content }));
-
-    const chatRequest: ChatRequest = {
+    return this.runGeneration({
+      userId,
       conversationId: conversation.id,
-      message,
-      model: effectiveModel,
-      temperature: effectiveTemperature,
-      systemPrompt: effectiveSystemPrompt,
-    };
-
-    try {
-      await provider.stream(chatRequest, (chunk) => {
-        if (chunk.type === 'content' && chunk.content) {
-          fullContent += chunk.content;
-          tokenCount += chunk.content.length / 4; // Rough estimation
-          onChunk?.(chunk);
-        } else if (chunk.type === 'done') {
-          onChunk?.(chunk);
-        } else if (chunk.type === 'error') {
-          onChunk?.(chunk);
-        }
-      });
-
-      // Update assistant message with final content
-      await messageRepository.completeMessage(assistantMessage.id, {
-        tokenCount: Math.round(tokenCount),
-        generationTimeMs: Date.now() - startTime,
-      });
-
-      // Update conversation timestamp and potentially generate title
-      await conversationRepository.updateTimestamp(conversation.id);
-
-      // Auto-generate title if this is the first exchange
-      const messageCount = await messageRepository.countByConversationId(conversation.id);
-      if (messageCount <= 2 && conversation.title === 'New Chat') {
-        const title = await this.generateTitle(message, fullContent, effectiveModel);
-        await conversationRepository.updateTitle(conversation.id, userId, title);
-      }
-
-      return {
-        conversationId: conversation.id,
-        userMessageId: userMessage.id,
-        assistantMessageId: assistantMessage.id,
-        content: fullContent,
-      };
-    } catch (error) {
-      logger.error('Chat service error', error as Record<string, unknown>);
-      await messageRepository.updateStatus(assistantMessage.id, 'error');
-      throw error;
-    }
+      assistantMessageId: assistantMessage.id,
+      request: {
+        message,
+        model: effectiveModel,
+        temperature: effectiveTemperature,
+        systemPrompt: effectiveSystemPrompt,
+        history: [],
+      },
+      historyConversationId: conversation.id,
+      excludeMessageIds: [userMessage.id, assistantMessage.id],
+      userMessageId: userMessage.id,
+      onChunk,
+      onTitle,
+      previousTitle: conversation.title,
+      firstUserMessage: message,
+    });
   },
 
   async regenerateResponse(
@@ -124,93 +179,230 @@ export const chatService = {
     conversationId: string,
     assistantMessageId: string,
     onChunk?: (chunk: StreamChunk) => void
-  ): Promise<{ content: string }> {
+  ): Promise<ChatResult> {
+    if (activeGenerationCountForUser(userId) >= config.chat.maxConcurrentGenerationsPerUser) {
+      throw new ConcurrencyError(
+        'You already have a generation in progress. Wait for it to finish or stop it first.'
+      );
+    }
+
     const conversation = await conversationRepository.findById(conversationId, userId);
     if (!conversation) {
-      throw new Error('Conversation not found');
+      throw new ChatError('Conversation not found', 'NOT_FOUND');
     }
 
     const assistantMessage = await messageRepository.findById(assistantMessageId);
-    if (!assistantMessage || assistantMessage.role !== 'assistant') {
-      throw new Error('Assistant message not found');
+    // The message must belong to this user's conversation — not just exist.
+    if (!assistantMessage || assistantMessage.role !== 'assistant' || assistantMessage.conversationId !== conversationId) {
+      throw new ChatError('Assistant message not found', 'NOT_FOUND');
     }
 
-    // Find the user message that preceded this assistant message
     const messages = await messageRepository.findByConversationId(conversationId);
-    const assistantIndex = messages.findIndex(m => m.id === assistantMessageId);
-    const userMessage = assistantIndex > 0 ? messages[assistantIndex - 1] : null;
-
-    if (!userMessage || userMessage.role !== 'user') {
-      throw new Error('No user message to regenerate from');
+    const assistantIndex = messages.findIndex((m) => m.id === assistantMessageId);
+    if (assistantIndex < 0) {
+      throw new ChatError('Assistant message not found', 'NOT_FOUND');
     }
 
-    // Get preferences
+    // The user message immediately preceding the assistant message is the
+    // prompt being regenerated; everything before it is history.
+    let userMessage: Message | null = null;
+    let userIndex = -1;
+    for (let i = assistantIndex - 1; i >= 0; i -= 1) {
+      if (messages[i].role === 'user') {
+        userMessage = messages[i];
+        userIndex = i;
+        break;
+      }
+    }
+    if (!userMessage) {
+      throw new ChatError('No user message to regenerate from', 'INVALID_REQUEST');
+    }
+
+    const history = messages
+      .slice(0, userIndex)
+      .filter((m) => m.role !== 'system')
+      .map((m) => ({ role: m.role as ContextMessage['role'], content: m.content }));
+
     const preferences = await preferencesRepository.get(userId);
-    const effectiveModel = preferences.model;
+    const effectiveModel = assistantMessage.model || preferences.model;
     const effectiveSystemPrompt = buildSystemPrompt(preferences.systemPrompt);
     const effectiveTemperature = preferences.temperature;
 
-    // Reset assistant message content and status
     await messageRepository.updateContent(assistantMessageId, '');
-    await messageRepository.updateStatus(assistantMessageId, 'streaming');
+    await messageRepository.finalize({ status: 'streaming' } as never && {
+      status: 'streaming',
+    } as never && { status: 'streaming' } as never) as unknown as void;
+    await messageRepository.finalize({ status: 'streaming' } as never && {
+      status: 'streaming',
+    } as never && { status: 'streaming' } as never) as unknown as void;
+
+    return this.runGeneration({
+      userId,
+      conversationId: conversation.id,
+      assistantMessageId,
+      request: {
+        message: userMessage.content,
+        model: effectiveModel,
+        temperature: effectiveTemperature,
+        systemPrompt: effectiveSystemPrompt,
+        history,
+      },
+      historyConversationId: undefined,
+      excludeMessageIds: [],
+      userMessageId: userMessage.id,
+      onChunk,
+      previousTitle: conversation.title,
+      firstUserMessage: undefined,
+    });
+  },
+
+  /**
+   * Shared generation pipeline: streams from the provider, persists partial
+   * content while streaming, and records a correct terminal state.
+   */
+  async runGeneration(params: {
+    userId: string;
+    conversationId: string;
+    assistantMessageId: string;
+    request: ChatRequest;
+    historyConversationId?: string;
+    excludeMessageIds: string[];
+    userMessageId: string;
+    onChunk?: (chunk: StreamChunk) => void;
+    onTitle?: (conversationId: string, title: string) => void;
+    previousTitle?: string;
+    firstUserMessage?: string;
+  }): Promise<ChatResult> {
+    const {
+      userId,
+      conversationId,
+      assistantMessageId,
+      request,
+      historyConversationId,
+      excludeMessageIds,
+      userMessageId,
+      onChunk,
+      onTitle,
+      previousTitle,
+      firstUserMessage,
+    } = params;
+
+    // Assemble prior turns for context, excluding the records created for
+    // this generation.
+    if (request.history.length === 0 && historyConversationId) {
+      const recent = await messageRepository.findRecentByConversationId(historyConversationId, 40);
+      request.history = buildContextHistory(
+        recent
+          .filter((m) => !excludeMessageIds.includes(m.id) && m.role !== 'system')
+          .map((m) => ({ role: m.role as ContextMessage['role'], content: m.content })),
+        config.chat.maxContextChars,
+        config.chat.maxHistoryMessageChars
+      );
+    }
+
+    const generationId = uuidv4();
+    const controller = new AbortController();
+    activeGenerations.set(generationId, {
+      userId,
+      conversationId,
+      assistantMessageId,
+      controller,
+    });
 
     const startTime = Date.now();
     let fullContent = '';
-    let tokenCount = 0;
+    let dirty = false;
 
-    const provider = getAIProvider();
-
-    // Build context (messages before the user message)
-    const contextMessages = messages
-      .slice(0, assistantIndex)
-      .map(m => ({ role: m.role, content: m.content }));
-
-    const chatRequest: ChatRequest = {
-      conversationId: conversation.id,
-      message: userMessage.content,
-      model: effectiveModel,
-      temperature: effectiveTemperature,
-      systemPrompt: effectiveSystemPrompt,
-    };
+    const flushTimer = setInterval(() => {
+      if (dirty) {
+        dirty = false;
+        messageRepository.updateContent(assistantMessageId, fullContent).catch(() => {
+          // Partial-flush failures are non-fatal; the final write retries.
+        });
+      }
+    }, config.chat.contentFlushIntervalMs);
 
     try {
-      await provider.stream(chatRequest, (chunk) => {
-        if (chunk.type === 'content' && chunk.content) {
-          fullContent += chunk.content;
-          tokenCount += chunk.content.length / 4;
-          onChunk?.({ ...chunk, messageId: assistantMessageId });
-        } else if (chunk.type === 'done') {
-          onChunk?.({ ...chunk, messageId: assistantMessageId });
-        } else if (chunk.type === 'error') {
-          onChunk?.({ ...chunk, messageId: assistantMessageId });
-        }
-      });
+      const provider = getAIProvider();
+      const result = await provider.stream(
+        request,
+        (chunk) => {
+          if (chunk.content) {
+            fullContent += chunk.content;
+            dirty = true;
+            onChunk?.({ type: 'content', content: chunk.content });
+          }
+        },
+        controller.signal
+      );
 
-      await messageRepository.completeMessage(assistantMessageId, {
-        tokenCount: Math.round(tokenCount),
+      const finalMessage = await messageRepository.finalize(assistantMessageId, {
+        status: result.status === 'completed' ? 'completed' : result.status,
+        content: fullContent,
+        tokenCount: estimateTokens(fullContent),
         generationTimeMs: Date.now() - startTime,
       });
 
-      await conversationRepository.updateTimestamp(conversation.id);
+      if (result.status === 'completed') {
+        await conversationRepository.touch(conversationId);
+      }
 
-      return { content: fullContent };
-    } catch (error) {
-      logger.error('Regenerate error', error as Record<string, unknown>);
-      await messageRepository.updateStatus(assistantMessageId, 'error');
-      throw error;
+      let title: string | undefined;
+      if (result.status === 'completed' && previousTitle === 'New Chat' && firstUserMessage) {
+        title = await this.generateTitle(firstUserMessage, fullContent, request.model || '');
+        if (title && title !== 'New Chat') {
+          await conversationRepository.updateFields(conversationId, userId, { title });
+          onTitle?.(conversationId, title);
+        }
+      }
+
+      if (result.status === 'error') {
+        return {
+          conversationId,
+          userMessageId,
+          assistantMessageId,
+          content: fullContent,
+          status: 'error',
+          error: result.error || 'Generation failed',
+        };
+      }
+
+      return {
+        conversationId,
+        userMessageId,
+        assistantMessageId,
+        content: fullContent,
+        status: result.status,
+        title,
+      };
+    } finally {
+      clearInterval(flushTimer);
+      activeGenerations.delete(generationId);
     }
   },
 
-  async abortGeneration(conversationId: string, assistantMessageId: string): Promise<void> {
-    const provider = getAIProvider();
-    provider.abort();
-    await messageRepository.abortMessage(assistantMessageId);
+  /**
+   * Abort a generation. The caller must own the generation: user id,
+   * conversation, and assistant message must all match the active entry.
+   */
+  abortGeneration(userId: string, conversationId: string, assistantMessageId: string): boolean {
+    for (const generation of activeGenerations.values()) {
+      if (
+        generation.userId === userId &&
+        generation.conversationId === conversationId &&
+        generation.assistantMessageId === assistantMessageId
+      ) {
+        generation.controller.abort();
+        return true;
+      }
+    }
+    return false;
   },
 
-  async generateTitle(userMessage: string, assistantResponse: string, model: string): Promise<string> {
+  async generateTitle(userMessage: string, assistantResponse: string, model: string): Promise<string | undefined> {
     try {
       const provider = getAIProvider();
-      const titlePrompt = `Generate a short, descriptive title (max 50 characters) for this conversation:\n\nUser: ${userMessage}\n\nAssistant: ${assistantResponse.substring(0, 500)}\n\nTitle:`;
+      const titlePrompt = `Generate a short, descriptive title (max 50 characters) for this conversation. Respond with only the title, no quotes, no extra text.\n\nUser: ${userMessage.slice(0, 500)}\n\nAssistant: ${assistantResponse.slice(0, 500)}`;
 
       const title = await provider.generate({
         message: titlePrompt,
@@ -219,21 +411,17 @@ export const chatService = {
         systemPrompt: 'You generate concise, descriptive chat titles. Respond with only the title, no quotes, no extra text.',
       });
 
-      // Clean up the title
-      let cleanTitle = title.trim().replace(/^["']|["']$/g, '').replace(/\n/g, ' ');
+      let cleanTitle = title.trim().replace(/^["']|["']$/g, '').replace(/\s+/g, ' ').trim();
       if (cleanTitle.length > 50) {
-        cleanTitle = cleanTitle.substring(0, 47) + '...';
+        cleanTitle = `${cleanTitle.slice(0, 47)}...`;
       }
-      return cleanTitle || 'New Chat';
+      return cleanTitle || undefined;
     } catch (error) {
-      logger.warn('Failed to generate title, using fallback', error as Record<string, unknown>);
-      // Fallback: use first few words of user message
+      logger.warn('Title generation failed, using fallback', { error: (error as Error).message });
+      // Fallback: first few words of the user's message.
       const words = userMessage.trim().split(/\s+/).slice(0, 6).join(' ');
-      return words.length > 50 ? words.substring(0, 47) + '...' : (words || 'New Chat');
+      if (!words) return undefined;
+      return words.length > 50 ? `${words.slice(0, 47)}...` : words;
     }
-  },
-
-  async getConversationContext(conversationId: string, maxMessages: number = 20): Promise<Message[]> {
-    return messageRepository.findRecentByConversationId(conversationId, maxMessages);
   },
 };
