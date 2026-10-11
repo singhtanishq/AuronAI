@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback, useId } from 'react';
+import React, { useRef, useState, useCallback, useEffect, useId } from 'react';
 import { createPortal } from 'react-dom';
 
 interface TooltipProps {
