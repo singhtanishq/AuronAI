@@ -448,7 +448,13 @@ export function Sidebar() {
         </>
       )}
       {sectionHeader('Recent')}
-      <div className="space-y-0.5">{renderRows(recent)}</div>
+      {recent.length === 0 ? (
+        <p className="px-2.5 py-6 text-center text-sm text-content-muted">
+          No conversations yet. Start chatting to see them here.
+        </p>
+      ) : (
+        <div className="space-y-0.5">{renderRows(recent)}</div>
+      )}
       {archived.length > 0 && (
         <div className="mt-2 border-t border-line-subtle pt-1">
           <button
