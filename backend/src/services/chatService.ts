@@ -328,12 +328,15 @@ export const chatService = {
         controller.signal
       );
 
-      const finalMessage = await messageRepository.finalize(assistantMessageId, {
+      const finalized = await messageRepository.finalize(assistantMessageId, {
         status: result.status === 'completed' ? 'completed' : result.status,
         content: fullContent,
         tokenCount: estimateTokens(fullContent),
         generationTimeMs: Date.now() - startTime,
       });
+      if (!finalized) {
+        logger.error(`Failed to finalize assistant message ${assistantMessageId}`);
+      }
 
       if (result.status === 'completed') {
         await conversationRepository.touch(conversationId);
@@ -341,11 +344,18 @@ export const chatService = {
 
       let title: string | undefined;
       if (result.status === 'completed' && previousTitle === 'New Chat' && firstUserMessage) {
-        title = await this.generateTitle(firstUserMessage, fullContent, request.model || '');
-        if (title && title !== 'New Chat') {
-          await conversationRepository.updateFields(conversationId, userId, { title });
-          onTitle?.(conversationId, title);
-        }
+        // Fire-and-forget: the answer is complete, so title generation must
+        // not delay the completion event. Progress is reported via onTitle.
+        void this.generateTitle(firstUserMessage, fullContent, request.model || '')
+          .then(async (generated) => {
+            if (generated && generated !== 'New Chat') {
+              await conversationRepository.updateFields(conversationId, userId, { title: generated });
+              onTitle?.(conversationId, generated);
+            }
+          })
+          .catch((error) => {
+            logger.warn('Title generation failed', { error: (error as Error).message });
+          });
       }
 
       if (result.status === 'error') {
