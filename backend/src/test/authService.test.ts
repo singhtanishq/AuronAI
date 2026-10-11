@@ -170,10 +170,8 @@ describe('authService.deleteAccount', () => {
 
     expect(await authService.validateToken(token)).toBeNull();
     const db = getDatabase();
-    expect(db.prepare(`SELECT COUNT(*) as c FROM users WHERE id = ?`).get(user.id)).toBeUndefined();
-    expect(
-      db.prepare(`SELECT COUNT(*) as c FROM conversations WHERE user_id = ?`).get(user.id)
-    ).toBeUndefined();
+    expect((db.prepare(`SELECT COUNT(*) as c FROM users WHERE id = ?`).get(user.id) as any).c).toBe(0);
+    expect((db.prepare(`SELECT COUNT(*) as c FROM conversations WHERE user_id = ?`).get(user.id) as any).c).toBe(0);
   });
 });
 
