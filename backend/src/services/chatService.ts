@@ -402,6 +402,7 @@ export const chatService = {
       };
     } finally {
       clearInterval(flushTimer);
+      signal?.removeEventListener('abort', onExternalAbort);
       activeGenerations.delete(generationId);
     }
   },
