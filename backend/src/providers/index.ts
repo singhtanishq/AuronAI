@@ -1,13 +1,8 @@
-import { AIProvider, ProviderError } from './aiProvider';
+import { AIProvider } from './aiProvider';
+import { OllamaProvider } from './ollamaProvider';
 
 let providerInstance: AIProvider | null = null;
-let providerFactory: () => AIProvider = createDefaultProvider;
-
-function createDefaultProvider(): AIProvider {
-  // Lazy require avoids a static dependency cycle at module load.
-  const { OllamaProvider } = require('./ollamaProvider') as typeof import('./ollamaProvider');
-  return new OllamaProvider();
-}
+let providerFactory: () => AIProvider = () => new OllamaProvider();
 
 export function getAIProvider(): AIProvider {
   if (!providerInstance) {
