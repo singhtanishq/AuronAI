@@ -125,10 +125,7 @@ function ConversationRow({
               {
                 label: 'Rename',
                 icon: <Pencil size={15} />,
-                onClick: () => {
-                  // Opened via dialog in the sidebar; triggered through event.
-                  window.dispatchEvent(new CustomEvent('auron:rename-conversation', { detail: conversation.id }));
-                },
+                onClick: onRename,
               },
               {
                 label: 'Delete',
@@ -215,17 +212,8 @@ export function Sidebar() {
 
   // Keep the sidebar in sync when a title changes anywhere in the app.
   useEffect(() => {
-    const handler = (event: Event) => {
-      const id = (event as CustomEvent<string>).detail;
-      const conversation = useConversationStore.getState().conversations.find((c) => c.id === id);
-      if (conversation) {
-        setRenameTarget({ conversationId: id, currentTitle: conversation.title });
-        setRenameValue(conversation.title);
-      }
-    };
-    window.addEventListener('auron:rename-conversation', handler);
-    return () => window.removeEventListener('auron:rename-conversation', handler);
-  }, []);
+    if (isAuthenticated) void refreshList();
+  }, [isAuthenticated, refreshList]);
 
   /* --------------------------------- search --------------------------------- */
 
@@ -371,7 +359,7 @@ export function Sidebar() {
 
   if (!isAuthenticated) return null;
 
-  const renderRows = (items: ConversationWithMeta[], archivedList = false) =>
+  const renderRows = (items: ConversationWithMeta[]) =>
     items.map((conversation) => (
       <ConversationRow
         key={conversation.id}
@@ -430,7 +418,7 @@ export function Sidebar() {
             Archived
             <span className="ml-auto rounded-full bg-surface-secondary px-1.5 text-[0.68rem]">{archived.length}</span>
           </button>
-          {showArchived && <div className="space-y-0.5 pt-1">{renderRows(archived, true)}</div>}
+          {showArchived && <div className="space-y-0.5 pt-1">{renderRows(archived)}</div>}
         </div>
       )}
     </>
@@ -460,7 +448,7 @@ export function Sidebar() {
         <div className={clsx('flex h-14 shrink-0 items-center border-b border-line-subtle', collapsed ? 'justify-center px-2' : 'justify-between px-4')}>
           <button
             type="button"
-            onClick={() => handleSelect}
+            onClick={() => navigate('/chat')}
             className="flex items-center gap-2.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             aria-label="Auron AI home"
           >
