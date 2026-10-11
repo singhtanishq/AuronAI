@@ -197,7 +197,10 @@ export class OllamaProvider implements AIProvider {
       let reading = true;
       while (reading) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          reading = false;
+          break;
+        }
         armIdleTimer();
 
         buffer += decoder.decode(value, { stream: true });
@@ -229,7 +232,6 @@ export class OllamaProvider implements AIProvider {
             return { status: 'completed', content };
           }
         }
-        void reading;
       }
 
       // Stream ended without an explicit done flag — treat whatever arrived
