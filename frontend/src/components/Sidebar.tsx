@@ -55,6 +55,29 @@ function ConversationRow({
 }: ConversationRowProps) {
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // Collapsed rail: a single icon per conversation — no truncated text.
+  if (collapsed) {
+    return (
+      <Tooltip content={conversation.title} placement="right">
+        <button
+          type="button"
+          onClick={onSelect}
+          className={clsx(
+            'flex h-9 w-9 items-center justify-center rounded-lg transition-colors duration-fast',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+            isActive
+              ? 'bg-accent-subtle text-accent'
+              : 'text-content-muted hover:bg-surface-hover hover:text-content-primary'
+          )}
+          aria-label={conversation.title}
+          aria-current={isActive ? 'true' : undefined}
+        >
+          {conversation.pinned ? <Pin size={15} /> : <MessageSquare size={15} />}
+        </button>
+      </Tooltip>
+    );
+  }
+
   const row = (
     <div className="group/row relative">
       <button
