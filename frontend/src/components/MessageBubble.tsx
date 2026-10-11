@@ -26,7 +26,6 @@ export const MessageBubble = memo(function MessageBubble({
   const isUser = message.role === 'user';
   const showTimestamps = useSettingsStore((s) => s.preferences?.showTimestamps ?? true);
   const [copied, setCopied] = useState(false);
-  const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const copiedTimer = useRef<ReturnType<typeof setTimeout>>();
 
   const html = useMemo(() => (isUser ? null : renderMarkdown(message.content)), [isUser, message.content]);
@@ -47,10 +46,8 @@ export const MessageBubble = memo(function MessageBubble({
     if (encoded === null) return;
     const ok = await copyToClipboard(decodeURIComponent(encoded));
     if (!ok) return;
-    setCopiedCode(encoded);
     target.textContent = 'Copied';
     setTimeout(() => {
-      setCopiedCode((current) => (current === encoded ? null : current));
       target.textContent = 'Copy';
     }, 1800);
   }, []);
