@@ -1,9 +1,7 @@
 import { getDatabase } from '../database';
 import { Message } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import { logger } from '../utils/logger';
-
-const db = getDatabase();
+import { nowIso } from '../utils/time';
 
 function rowToMessage(row: any): Message {
   return {
@@ -28,151 +26,105 @@ export const messageRepository = {
     options?: { model?: string; status?: Message['status'] }
   ): Promise<Message> {
     const id = uuidv4();
-    const stmt = db.prepare(`
-      INSERT INTO messages (id, conversation_id, role, content, model, status)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `);
-    stmt.run(id, conversationId, role, content, options?.model || null, options?.status || 'completed');
+    const timestamp = nowIso();
+    getDatabase()
+      .prepare(
+        `INSERT INTO messages (id, conversation_id, role, content, model, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(id, conversationId, role, content, options?.model || null, options?.status || 'completed', timestamp, timestamp);
 
-    const row = db.prepare(`SELECT * FROM messages WHERE id = ?`).get(id) as any;
+    const row = getDatabase().prepare(`SELECT * FROM messages WHERE id = ?`).get(id) as any;
     return rowToMessage(row);
   },
 
   async createUserMessage(conversationId: string, content: string): Promise<Message> {
-    return this.create(conversationId, 'user', content);
+    return this.create(conversationId, 'user', content, { status: 'completed' });
   },
 
   async createAssistantMessage(
     conversationId: string,
-    content: string,
     model: string,
     status: Message['status'] = 'streaming'
   ): Promise<Message> {
-    return this.create(conversationId, 'assistant', content, { model, status });
-  },
-
-  async createSystemMessage(conversationId: string, content: string): Promise<Message> {
-    return this.create(conversationId, 'system', content);
+    return this.create(conversationId, 'assistant', '', { model, status });
   },
 
   async findById(id: string): Promise<Message | null> {
-    const row = db.prepare(`SELECT * FROM messages WHERE id = ?`).get(id) as any;
+    const row = getDatabase().prepare(`SELECT * FROM messages WHERE id = ?`).get(id) as any;
     return row ? rowToMessage(row) : null;
   },
 
   async findByConversationId(conversationId: string): Promise<Message[]> {
-    const rows = db.prepare(`
-      SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC
-    `).all(conversationId) as any[];
+    const rows = getDatabase()
+      .prepare(`SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC, rowid ASC`)
+      .all(conversationId) as any[];
     return rows.map(rowToMessage);
   },
 
   async findRecentByConversationId(conversationId: string, limit: number): Promise<Message[]> {
-    const rows = db.prepare(`
-      SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT ?
-    `).all(conversationId, limit) as any[];
-    return rows.map(rowToMessage).reverse();
+    const rows = getDatabase()
+      .prepare(
+        `SELECT * FROM (
+           SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?
+         ) ORDER BY created_at ASC, rowid ASC`
+      )
+      .all(conversationId, limit) as any[];
+    return rows.map(rowToMessage);
+  },
+
+  /** Atomically append a delta to a message's content. */
+  async appendContent(id: string, delta: string): Promise<void> {
+    getDatabase()
+      .prepare(`UPDATE messages SET content = content || ?, updated_at = ? WHERE id = ?`)
+      .run(delta, nowIso(), id);
   },
 
   async updateContent(id: string, content: string): Promise<Message | null> {
-    const stmt = db.prepare(`UPDATE messages SET content = ? WHERE id = ?`);
-    const result = stmt.run(content, id);
+    const result = getDatabase()
+      .prepare(`UPDATE messages SET content = ?, updated_at = ? WHERE id = ?`)
+      .run(content, nowIso(), id);
     if (result.changes === 0) return null;
     return this.findById(id);
   },
 
-  async appendContent(id: string, content: string): Promise<Message | null> {
-    const message = await this.findById(id);
-    if (!message) return null;
-    return this.updateContent(id, message.content + content);
-  },
-
-  async updateStatus(id: string, status: Message['status']): Promise<Message | null> {
-    const stmt = db.prepare(`UPDATE messages SET status = ? WHERE id = ?`);
-    const result = stmt.run(status, id);
-    if (result.changes === 0) return null;
-    return this.findById(id);
-  },
-
-  async updateMetadata(
+  async finalize(
     id: string,
-    metadata: { tokenCount?: number; generationTimeMs?: number; model?: string }
+    options: {
+      status: Message['status'];
+      content?: string;
+      tokenCount?: number;
+      generationTimeMs?: number;
+    }
   ): Promise<Message | null> {
-    const updates: string[] = [];
-    const params: any[] = [];
+    const sets = ['status = ?', 'updated_at = ?'];
+    const params: unknown[] = [options.status, nowIso()];
 
-    if (metadata.tokenCount !== undefined) {
-      updates.push('token_count = ?');
-      params.push(metadata.tokenCount);
+    if (options.content !== undefined) {
+      sets.push('content = ?');
+      params.push(options.content);
     }
-    if (metadata.generationTimeMs !== undefined) {
-      updates.push('generation_time_ms = ?');
-      params.push(metadata.generationTimeMs);
+    if (options.tokenCount !== undefined) {
+      sets.push('token_count = ?');
+      params.push(options.tokenCount);
     }
-    if (metadata.model !== undefined) {
-      updates.push('model = ?');
-      params.push(metadata.model);
-    }
-
-    if (updates.length === 0) return this.findById(id);
-
-    params.push(id);
-    const stmt = db.prepare(`UPDATE messages SET ${updates.join(', ')} WHERE id = ?`);
-    const result = stmt.run(...params);
-    if (result.changes === 0) return null;
-    return this.findById(id);
-  },
-
-  async completeMessage(id: string, metadata?: { tokenCount?: number; generationTimeMs?: number }): Promise<Message | null> {
-    const updates = ['status = ?'];
-    const params: any[] = ['completed'];
-
-    if (metadata?.tokenCount !== undefined) {
-      updates.push('token_count = ?');
-      params.push(metadata.tokenCount);
-    }
-    if (metadata?.generationTimeMs !== undefined) {
-      updates.push('generation_time_ms = ?');
-      params.push(metadata.generationTimeMs);
+    if (options.generationTimeMs !== undefined) {
+      sets.push('generation_time_ms = ?');
+      params.push(options.generationTimeMs);
     }
 
     params.push(id);
-    const stmt = db.prepare(`UPDATE messages SET ${updates.join(', ')} WHERE id = ?`);
-    const result = stmt.run(...params);
+    const result = getDatabase()
+      .prepare(`UPDATE messages SET ${sets.join(', ')} WHERE id = ?`)
+      .run(...params);
     if (result.changes === 0) return null;
     return this.findById(id);
-  },
-
-  async abortMessage(id: string): Promise<Message | null> {
-    const stmt = db.prepare(`UPDATE messages SET status = ? WHERE id = ?`);
-    const result = stmt.run('aborted', id);
-    if (result.changes === 0) return null;
-    return this.findById(id);
-  },
-
-  async delete(id: string): Promise<boolean> {
-    const stmt = db.prepare(`DELETE FROM messages WHERE id = ?`);
-    const result = stmt.run(id);
-    return result.changes > 0;
-  },
-
-  async deleteByConversationId(conversationId: string): Promise<number> {
-    const stmt = db.prepare(`DELETE FROM messages WHERE conversation_id = ?`);
-    const result = stmt.run(conversationId);
-    return result.changes;
-  },
-
-  async getLastUserMessage(conversationId: string): Promise<Message | null> {
-    const row = db.prepare(`
-      SELECT * FROM messages
-      WHERE conversation_id = ? AND role = 'user'
-      ORDER BY created_at DESC LIMIT 1
-    `).get(conversationId) as any;
-    return row ? rowToMessage(row) : null;
   },
 
   async countByConversationId(conversationId: string): Promise<number> {
-    const row = db.prepare(`SELECT COUNT(*) as count FROM messages WHERE conversation_id = ?`).get(conversationId) as any;
+    const row = getDatabase()
+      .prepare(`SELECT COUNT(*) as count FROM messages WHERE conversation_id = ?`)
+      .get(conversationId) as any;
     return row?.count || 0;
   },
 };
