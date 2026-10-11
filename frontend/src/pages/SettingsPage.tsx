@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 import { Cpu, Monitor, Moon, Sun, Database, ShieldCheck, Wifi, AlertCircle } from 'lucide-react';
 import { useSettingsStore, useUIStore, useConversationStore, useChatStore } from '../stores';
@@ -7,7 +7,6 @@ import { useToast } from '../components/ui/Toast';
 import { Button, Textarea, ConfirmDialog } from '../components/ui';
 import { api } from '../services/api';
 import { formatModelSize } from '../utils/format';
-
 
 type TabId = 'appearance' | 'chat' | 'model' | 'data';
 
