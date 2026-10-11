@@ -2,8 +2,9 @@ import React, { createContext, useContext, useEffect, useCallback, useMemo, useS
 import { useUIStore, useSettingsStore } from '../stores';
 import { api } from '../services/api';
 import { useAuth } from './AuthContext';
+import type { UserPreferences } from '../types';
 
-type Theme = 'light' | 'dark' | 'system';
+export type Theme = 'light' | 'dark' | 'system';
 
 interface ThemeContextType {
   theme: Theme;
