@@ -53,6 +53,7 @@ export function ChatArea() {
   const containerRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const nearBottomRef = useRef(true);
+  const [showJumpToBottom, setShowJumpToBottom] = useState(false);
   const loadSeqRef = useRef(0);
   const controllerRef = useRef<AbortController | null>(null);
   const streamRef = useRef<{
@@ -97,7 +98,9 @@ export function ChatArea() {
   }, []);
 
   const handleScroll = useCallback(() => {
-    nearBottomRef.current = isNearBottom();
+    const near = isNearBottom();
+    nearBottomRef.current = near;
+    setShowJumpToBottom((prev) => (prev !== !near ? !near : prev));
   }, [isNearBottom]);
 
   /* ------------------------- conversation loading ------------------------- */
@@ -305,13 +308,7 @@ export function ChatArea() {
         }
 
         case 'error': {
-          finalizeStream(message?.status === 'streaming' ? 'error' : 'error');
-          if (event.assistantMessageId) {
-            const viewing2 = useConversationStore.getState().activeConversationId === targetId;
-            if (viewing2) {
-              updateMessage(event.assistantMessageId, { status: 'error' });
-            }
-          }
+          finalizeStream('error');
           setBanner(event.message);
           useChatStore.getState().endGeneration(targetId);
           break;
@@ -621,11 +618,12 @@ export function ChatArea() {
           <div ref={endRef} className="h-px" />
         </div>
 
-        {!nearBottomRef.current && messages.length > 0 && (
+        {showJumpToBottom && messages.length > 0 && (
           <button
             type="button"
             onClick={() => {
               nearBottomRef.current = true;
+              setShowJumpToBottom(false);
               scrollToBottom();
             }}
             className="icon-btn sticky bottom-4 left-1/2 -translate-x-1/2 border border-line-subtle bg-surface-elevated shadow-md"
