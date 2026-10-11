@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { Conversation, ConversationWithMeta, Message, UserPreferences, ModelInfo } from '../types';
+import type { User, Conversation, ConversationWithMeta, Message, UserPreferences, ModelInfo } from '../types';
 
 /* ============================== Auth ============================== */
 
