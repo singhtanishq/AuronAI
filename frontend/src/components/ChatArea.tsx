@@ -63,6 +63,9 @@ export function ChatArea() {
     raf: number | null;
   }>({ targetId: null, messageId: null, content: '', buffer: '', raf: null });
   const tempUserMessageIdRef = useRef<string | null>(null);
+  // Safety net for the optimistic prompt text: survives even if a
+  // conversation load replaces the store between send and the 'start' event.
+  const pendingUserContentRef = useRef<string | null>(null);
 
   // Effective model: fall back to the first installed model when the stored
   // preference is no longer available on this machine.
@@ -339,6 +342,7 @@ export function ChatArea() {
 
       const tempMessage = newLocalMessage({ conversationId, role: 'user', content });
       tempUserMessageIdRef.current = tempMessage.id;
+      pendingUserContentRef.current = content;
       if (useConversationStore.getState().activeConversationId === conversationId) {
         addMessage(tempMessage);
       }
