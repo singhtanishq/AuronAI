@@ -55,9 +55,12 @@ DOMPurify.addHook('afterSanitizeAttributes', (node) => {
   }
 });
 
-marked.setOptions({
+// Register the custom renderer and options. `marked.setOptions` ignores
+// renderer overrides — `marked.use` is required for them to take effect.
+marked.use({
   breaks: true,
   gfm: true,
+  renderer,
 });
 
 function escapeHtml(value: string): string {
