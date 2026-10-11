@@ -63,11 +63,16 @@ export const messageRepository = {
   },
 
   async findRecentByConversationId(conversationId: string, limit: number): Promise<Message[]> {
+    // rowid is not projected through SELECT *, so alias it explicitly to keep
+    // ordering deterministic when timestamps collide.
     const rows = getDatabase()
       .prepare(
         `SELECT * FROM (
-           SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?
-         ) ORDER BY created_at ASC, rowid ASC`
+           SELECT rowid AS _ordering_rowid, * FROM messages
+           WHERE conversation_id = ?
+           ORDER BY created_at DESC, rowid DESC
+           LIMIT ?
+         ) ORDER BY created_at ASC, _ordering_rowid ASC`
       )
       .all(conversationId, limit) as any[];
     return rows.map(rowToMessage);
