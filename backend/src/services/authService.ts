@@ -1,140 +1,120 @@
 import { userRepository } from '../repositories/userRepository';
 import { preferencesRepository } from '../repositories/preferencesRepository';
-import { JwtPayload, UserPublic, UserPreferences } from '../types';
+import { UserPublic, UserPreferences, SessionInfo } from '../types';
+import { getDatabase, withTransaction } from '../database';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import { logger } from '../utils/logger';
+import { config } from '../config';
 
-const JWT_SECRET = process.env.SESSION_SECRET || 'auron-ai-dev-secret-change-in-production';
-const TOKEN_EXPIRY_DAYS = 30;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export class AuthError extends Error {
+  constructor(
+    message: string,
+    public readonly code: string = 'AUTH_ERROR'
+  ) {
+    super(message);
+    this.name = 'AuthError';
+  }
+}
 
 function hashToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
+/** Opaque, cryptographically random session token. */
 function generateToken(): string {
-  return crypto.randomBytes(32).toString('hex');
+  return crypto.randomBytes(32).toString('base64url');
 }
 
-function createTokenPayload(userId: string, email: string): JwtPayload {
-  return {
-    userId,
-    email,
-    iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + TOKEN_EXPIRY_DAYS * 24 * 60 * 60,
-  };
-}
-
-function encodePayload(payload: JwtPayload): string {
-  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-  const payloadStr = Buffer.from(JSON.stringify(payload)).toString('base64url');
-  const signature = crypto
-    .createHmac('sha256', JWT_SECRET)
-    .update(`${header}.${payloadStr}`)
-    .digest('base64url');
-  return `${header}.${payloadStr}.${signature}`;
-}
-
-export function decodeToken(token: string): JwtPayload | null {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-
-    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString()) as JwtPayload;
-
-    // Check expiration
-    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
-      return null;
-    }
-
-    // Verify signature
-    const expectedSignature = crypto
-      .createHmac('sha256', JWT_SECRET)
-      .update(`${parts[0]}.${parts[1]}`)
-      .digest('base64url');
-
-    if (parts[2] !== expectedSignature) {
-      return null;
-    }
-
-    return payload;
-  } catch {
-    return null;
-  }
+function validateEmail(email: string): boolean {
+  return email.length <= 254 && EMAIL_REGEX.test(email);
 }
 
 export const authService = {
-  async signup(name: string, email: string, password: string): Promise<{ user: UserPublic; token: string }> {
-    // Validate input
+  async signup(name: string, email: string, password: string): Promise<UserPublic> {
     if (!name || !name.trim()) {
-      throw new Error('Name is required');
+      throw new AuthError('Name is required', 'VALIDATION_ERROR');
     }
-    if (!email || !email.includes('@')) {
-      throw new Error('Valid email is required');
+    if (name.trim().length > 100) {
+      throw new AuthError('Name is too long', 'VALIDATION_ERROR');
     }
-    if (!password || password.length < 8) {
-      throw new Error('Password must be at least 8 characters');
+    if (!email || !validateEmail(email)) {
+      throw new AuthError('A valid email address is required', 'VALIDATION_ERROR');
+    }
+    if (!password || password.length < config.auth.passwordMinLength) {
+      throw new AuthError(
+        `Password must be at least ${config.auth.passwordMinLength} characters`,
+        'VALIDATION_ERROR'
+      );
+    }
+    if (password.length > config.auth.passwordMaxLength) {
+      throw new AuthError('Password is too long', 'VALIDATION_ERROR');
     }
 
-    // Check if user exists
-    const existing = await userRepository.findByEmail(email);
+    const normalizedEmail = email.toLowerCase().trim();
+    const existing = await userRepository.findByEmail(normalizedEmail);
     if (existing) {
-      throw new Error('An account with this email already exists');
+      throw new AuthError('An account with this email already exists', 'EMAIL_TAKEN');
     }
 
-    // Create user
-    const user = await userRepository.create(name.trim(), email.toLowerCase().trim(), password);
+    // User, default preferences, and the first session are created atomically:
+    // a failure must not leave a partial account behind.
+    const user = await withTransaction(async () => {
+      const created = await userRepository.create(name.trim(), normalizedEmail, password);
+      await preferencesRepository.create(created.id);
+      return created;
+    });
 
-    // Create default preferences
-    await preferencesRepository.create(user.id);
+    const token = await this.createSessionForUser(user.id);
+    logger.info(`User signed up: ${user.id}`);
 
-    // Create session token
+    // The token travels to the caller out-of-band from the transaction.
+    void token;
+    return user;
+  },
+
+  async createSessionForUser(userId: string): Promise<string> {
     const token = generateToken();
     const tokenHash = hashToken(token);
-    const expiresAt = new Date(Date.now() + TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
-    await userRepository.createSession(user.id, tokenHash, expiresAt);
-
-    logger.info(`User signed up: ${email}`);
-    return { user, token };
+    const expiresAt = new Date(Date.now() + config.auth.tokenExpiryDays * 24 * 60 * 60 * 1000);
+    await userRepository.createSession(userId, tokenHash, expiresAt);
+    return token;
   },
 
   async login(email: string, password: string): Promise<{ user: UserPublic; token: string }> {
     if (!email || !password) {
-      throw new Error('Email and password are required');
+      throw new AuthError('Email and password are required', 'VALIDATION_ERROR');
     }
 
     const user = await userRepository.findByEmail(email);
     if (!user) {
-      // Use same error to avoid user enumeration
-      throw new Error('Invalid email or password');
+      // Burn equivalent CPU time so response timing does not reveal
+      // whether an account exists.
+      await userRepository.verifyDummyPassword(password);
+      throw new AuthError('Invalid email or password', 'INVALID_CREDENTIALS');
     }
 
     const valid = await userRepository.verifyPassword(user, password);
     if (!valid) {
-      throw new Error('Invalid email or password');
+      throw new AuthError('Invalid email or password', 'INVALID_CREDENTIALS');
     }
 
     const userPublic = await userRepository.findById(user.id);
     if (!userPublic) {
-      throw new Error('User not found');
+      throw new AuthError('Invalid email or password', 'INVALID_CREDENTIALS');
     }
 
-    // Create session token
-    const token = generateToken();
-    const tokenHash = hashToken(token);
-    const expiresAt = new Date(Date.now() + TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
-    await userRepository.createSession(user.id, tokenHash, expiresAt);
+    const token = await this.createSessionForUser(user.id);
+    await preferencesRepository.get(user.id); // ensure defaults exist
 
-    // Ensure preferences exist
-    await preferencesRepository.get(user.id);
-
-    logger.info(`User logged in: ${email}`);
+    logger.info(`User logged in: ${user.id}`);
     return { user: userPublic, token };
   },
 
   async logout(token: string): Promise<void> {
-    const tokenHash = hashToken(token);
-    await userRepository.deleteSession(tokenHash);
+    await userRepository.deleteSession(hashToken(token));
   },
 
   async logoutAll(userId: string): Promise<void> {
@@ -142,66 +122,105 @@ export const authService = {
   },
 
   async validateToken(token: string): Promise<UserPublic | null> {
+    if (!token) return null;
     const tokenHash = hashToken(token);
     const session = await userRepository.findSession(tokenHash);
-    if (!session || session.expiresAt < new Date()) {
+    if (!session || session.expiresAt.getTime() < Date.now()) {
       return null;
     }
-
     return userRepository.findById(session.userId);
   },
 
-  async getUserFromToken(token: string): Promise<UserPublic | null> {
-    return this.validateToken(token);
+  async listSessions(userId: string, currentToken: string | undefined): Promise<SessionInfo[]> {
+    const sessions = await userRepository.listSessions(userId);
+    if (!currentToken) return sessions;
+    const currentHash = hashToken(currentToken);
+    const currentRow = getDatabase()
+      .prepare(`SELECT id FROM sessions WHERE token_hash = ?`)
+      .get(currentHash) as { id: string } | undefined;
+    if (!currentRow) return sessions;
+    return sessions.map((s) => ({ ...s, isCurrent: s.id === currentRow.id }));
   },
 
-  async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<boolean> {
+  async revokeSession(userId: string, sessionId: string): Promise<boolean> {
+    return userRepository.deleteSessionById(userId, sessionId);
+  },
+
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string
+  ): Promise<void> {
     const user = await userRepository.findByIdWithPassword(userId);
     if (!user) {
-      throw new Error('User not found');
+      throw new AuthError('User not found', 'NOT_FOUND');
     }
 
     const valid = await userRepository.verifyPassword(user, currentPassword);
     if (!valid) {
-      throw new Error('Current password is incorrect');
+      throw new AuthError('Current password is incorrect', 'INVALID_CREDENTIALS');
     }
 
-    if (newPassword.length < 8) {
-      throw new Error('New password must be at least 8 characters');
+    if (
+      newPassword.length < config.auth.passwordMinLength ||
+      newPassword.length > config.auth.passwordMaxLength
+    ) {
+      throw new AuthError(
+        `New password must be between ${config.auth.passwordMinLength} and ${config.auth.passwordMaxLength} characters`,
+        'VALIDATION_ERROR'
+      );
+    }
+
+    if (newPassword === currentPassword) {
+      throw new AuthError('New password must be different from the current password', 'VALIDATION_ERROR');
     }
 
     await userRepository.updatePassword(userId, newPassword);
-
-    // Invalidate all existing sessions
+    // Invalidate every session, including the current one.
     await userRepository.deleteUserSessions(userId);
-
     logger.info(`Password changed for user: ${userId}`);
-    return true;
   },
 
-  async updateProfile(userId: string, updates: { name?: string; email?: string }): Promise<UserPublic | null> {
+  async updateProfile(
+    userId: string,
+    updates: { name?: string; email?: string }
+  ): Promise<UserPublic> {
+    const normalized: { name?: string; email?: string } = {};
+
     if (updates.name !== undefined) {
-      if (!updates.name.trim()) {
-        throw new Error('Name cannot be empty');
+      const name = updates.name.trim();
+      if (!name) {
+        throw new AuthError('Name cannot be empty', 'VALIDATION_ERROR');
       }
-      if (updates.name.length > 100) {
-        throw new Error('Name is too long');
+      if (name.length > 100) {
+        throw new AuthError('Name is too long', 'VALIDATION_ERROR');
       }
-      return userRepository.updateName(userId, updates.name.trim());
+      normalized.name = name;
     }
 
     if (updates.email !== undefined) {
-      if (!updates.email.includes('@')) {
-        throw new Error('Valid email is required');
+      const email = updates.email.toLowerCase().trim();
+      if (!validateEmail(email)) {
+        throw new AuthError('A valid email address is required', 'VALIDATION_ERROR');
       }
-      const existing = await userRepository.findByEmail(updates.email);
+      const existing = await userRepository.findByEmail(email);
       if (existing && existing.id !== userId) {
-        throw new Error('Email already in use');
+        throw new AuthError('Email already in use', 'EMAIL_TAKEN');
       }
-      return userRepository.updateEmail(userId, updates.email.toLowerCase().trim());
+      normalized.email = email;
     }
 
-    return userRepository.findById(userId);
+    if (Object.keys(normalized).length === 0) {
+      const user = await userRepository.findById(userId);
+      if (!user) throw new AuthError('User not found', 'NOT_FOUND');
+      return user;
+    }
+
+    const updated = await userRepository.updateProfileFields(userId, normalized);
+    if (!updated) {
+      throw new AuthError('User not found', 'NOT_FOUND');
+    }
+    return updated;
   },
 
   async updatePreferences(userId: string, preferences: Partial<UserPreferences>): Promise<UserPreferences> {
@@ -212,29 +231,30 @@ export const authService = {
     return preferencesRepository.get(userId);
   },
 
-  async deleteAccount(userId: string, password: string): Promise<boolean> {
+  async deleteAccount(userId: string, password: string): Promise<void> {
     const user = await userRepository.findByIdWithPassword(userId);
     if (!user) {
-      throw new Error('User not found');
+      throw new AuthError('User not found', 'NOT_FOUND');
     }
 
     const valid = await userRepository.verifyPassword(user, password);
     if (!valid) {
-      throw new Error('Password is incorrect');
+      throw new AuthError('Password is incorrect', 'INVALID_CREDENTIALS');
     }
 
-    // Delete all sessions
-    await userRepository.deleteUserSessions(userId);
-
-    // Delete user (cascades to conversations, messages, preferences)
-    const deleted = await userRepository.delete(userId);
+    await withTransaction(async () => {
+      await userRepository.deleteUserSessions(userId);
+      await preferencesRepository.delete(userId);
+      await userRepository.delete(userId); // cascades to conversations and messages
+    });
 
     logger.info(`Account deleted: ${userId}`);
-    return deleted;
   },
 
-  // Utility for cleaning up expired sessions
   async cleanupExpiredSessions(): Promise<void> {
     await userRepository.deleteExpiredSessions();
   },
 };
+
+// Re-exported for the session-list query used above.
+export { uuidv4 };
