@@ -295,15 +295,19 @@ export const chatService = {
 
     // Assemble prior turns for context, excluding the records created for
     // this generation.
-    if (request.history.length === 0 && historyConversationId) {
-      const recent = await messageRepository.findRecentByConversationId(historyConversationId, 40);
-      request.history = buildContextHistory(
-        recent
-          .filter((m) => !excludeMessageIds.includes(m.id) && m.role !== 'system')
-          .map((m) => ({ role: m.role as ContextMessage['role'], content: m.content })),
-        config.chat.maxContextChars,
-        config.chat.maxHistoryMessageChars
-      );
+    if (!request.history || request.history.length === 0) {
+      if (historyConversationId) {
+        const recent = await messageRepository.findRecentByConversationId(historyConversationId, 40);
+        request.history = buildContextHistory(
+          recent
+            .filter((m) => !excludeMessageIds.includes(m.id) && m.role !== 'system')
+            .map((m) => ({ role: m.role as ContextMessage['role'], content: m.content })),
+          config.chat.maxContextChars,
+          config.chat.maxHistoryMessageChars
+        );
+      } else {
+        request.history = [];
+      }
     }
 
     const generationId = uuidv4();
