@@ -4,7 +4,7 @@ import { Cpu, Monitor, Moon, Sun, Database, ShieldCheck, Wifi, AlertCircle } fro
 import { useSettingsStore, useUIStore, useConversationStore, useChatStore } from '../stores';
 import { useTheme, usePreferences } from '../contexts/ThemeContext';
 import { useToast } from '../components/ui/Toast';
-import { Button, Input, Textarea, ConfirmDialog } from '../components/ui';
+import { Button, Textarea, ConfirmDialog } from '../components/ui';
 import { api } from '../services/api';
 import { formatModelSize } from '../utils/format';
 import type { Theme } from '../types';
